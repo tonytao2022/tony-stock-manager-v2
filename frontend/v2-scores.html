@@ -165,13 +165,13 @@ for(const a of advItems){
 advHtml+='</div>';
 
 // 仓位合规指示器
-advHtml+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--bg5);border:1px solid var(--bd);font-size:.78em">';
+advHtml+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--bg5);border:1px solid var(--bd);font-size:.78em">\n<div style=display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px>';
 advHtml+='<div style=display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px>';
 advHtml+='<span><b>📊 方案C仓位规则</b> 单票≤总资金×(15%+5%偏差) | 总仓≤季节上限 | 回撤>15%自动降仓</span>';
 // 计算当前总仓大概比例（从mkt数据反推）
 const curSeason=sn||'chaos';
 const curP=sp[curSeason]||{totalPct:20};
-advHtml+='<span style=color:var(--t3)>当前混沌+弱春 → 总仓≤'+curP.totalPct+'%  |  单票≤15%</span>';
+advHtml+='<span style=color:var(--t3)>当前混沌+弱春 → 总仓≤'+curP.totalPct+'%  |  单票≤15%(含5%偏差) <span title="被动上涨超标不算违规;主动买入超软上限(20%)才拦截">📖</span></span>';
 advHtml+='</div></div>';
 
 document.getElementById('adviceBox').innerHTML=advHtml;
