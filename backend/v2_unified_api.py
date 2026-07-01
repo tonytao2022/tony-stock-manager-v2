@@ -143,7 +143,7 @@ def checkpoints():
 @app.route('/api/v2/strategy/config')
 def sconfig():
     c = conn(); cu = c.cursor()
-    cu.execute("SELECT id, name, season_type, buy_min_score, max_pos_pct, max_total_pct, stop_loss_pct, trailing_stop_pct, cool_days, max_hold_days, p1_score, p2_score, p3_score, description FROM strategy_config WHERE 1=1 ORDER BY id")
+    cu.execute("SELECT id, name, season_type, buy_min_score, max_pos_pct, max_total_pct, position_tolerance, stop_loss_pct, trailing_stop_pct, cool_days, max_hold_days, p1_score, p2_score, p3_score, description FROM strategy_config WHERE 1=1 ORDER BY id")
     cols = [d[0] for d in cu.description]
     cfg = [dict(zip(cols, r)) for r in cu.fetchall()]
     cu.close(); c.close()
@@ -779,7 +779,7 @@ def strategy_version_snapshot():
     new_ver = max_ver + 1
     
     # 读取当前所有策略配置
-    cu.execute("SELECT id, name, season_type, buy_min_score, p1_score, p2_score, p3_score, stop_loss_pct, max_hold_days, cool_days, trailing_stop_pct, max_pos_pct, is_active, description, max_total_pct FROM strategy_config WHERE 1=1 ORDER BY id")
+    cu.execute("SELECT id, name, season_type, buy_min_score, p1_score, p2_score, p3_score, stop_loss_pct, max_hold_days, cool_days, trailing_stop_pct, max_pos_pct, is_active, description, max_total_pct, position_tolerance FROM strategy_config WHERE 1=1 ORDER BY id")
     saved = 0
     for r in cu.fetchall():
         snapshot = _j.dumps({

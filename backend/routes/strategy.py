@@ -110,7 +110,7 @@ def get_config():
         with db_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT id, name, season_type, buy_min_score, max_hold_days, stop_loss_pct,
-                       trailing_stop_pct, max_pos_pct, max_total_pct, cool_days, p1_score, p2_score, p3_score
+                       trailing_stop_pct, max_pos_pct, max_total_pct, position_tolerance, cool_days, p1_score, p2_score, p3_score
                 FROM strategy_config WHERE is_active=1 AND season_type IS NOT NULL AND season_type != ''
             """)
             rows = cur.fetchall()
@@ -137,6 +137,7 @@ def get_config():
                 'buy_min_score': r['buy_min_score'],
                 'max_pos_pct': r['max_pos_pct'],
                 'max_total_pct': r.get('max_total_pct', 30),
+                'position_tolerance': r.get('position_tolerance', 5),
                 'stop_loss_pct': float(r['stop_loss_pct']) if r['stop_loss_pct'] else 0,
                 'max_hold_days': r['max_hold_days'],
                 'trailing_stop_pct': float(r['trailing_stop_pct']) if r['trailing_stop_pct'] else 0,
