@@ -132,6 +132,30 @@ for i, r in enumerate(results):
               'dual_track_v1', op_mode, '', '', '', sig_conf, 0, 0.0, 'weak_heng',
               tr_score, ss_score, mo_score, po_score, mf_v, mg_score, vr,
               stock_season, stf_score, stf_capital, stf_volume, stf_overbought, stf_momentum))
+        
+        # 同步写入daily_score_snapshot（前端v2-scores.html使用的评分快照表）
+        try:
+            cur2.execute("""
+                INSERT INTO daily_score_snapshot 
+                (trade_date, ts_code, name, calibrated_score, composite_score,
+                 close_price, change_pct, season, signal_label)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    calibrated_score=VALUES(calibrated_score),
+                    composite_score=VALUES(composite_score),
+                    close_price=VALUES(close_price),
+                    change_pct=VALUES(change_pct),
+                    season=VALUES(season),
+                    signal_label=VALUES(signal_label)
+            """, (
+                td, code, r.get('name',''),
+                float(r.get('calibrated_score',0)), float(r['score']),
+                float(r.get('close_price',0)), float(r.get('change_pct',0)),
+                stock_season, r.get('signal_label','')
+            ))
+        except Exception as e2:
+            pass
+        
         saved += 1
     except Exception as e:
         skipped += 1

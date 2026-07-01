@@ -1,17 +1,17 @@
 #!/bin/bash
 # ============================================
 # 收盘后全量数据拉取 + 技术指标 + 季节判定 + 评分管道
-# 交易日 16:00~17:00 自动执行（由crontab触发）
+# 交易日 16:00~17:00 自动执行(由crontab触发)
 # ============================================
-# set -e 已移除（避免Tushare接口临时无数据导致全管道退出）
-# Token 从 db_config.py 的 get_tushare_token() 动态获取，不硬编码
+# set -e 已移除(避免Tushare接口临时无数据导致全管道退出)
+# Token 从 db_config.py 的 get_tushare_token() 动态获取,不硬编码
 cd /root/stock-system-v2/backend
 
 LOG=/tmp/stock_pipeline_v2.log
 echo "[$(date '+%H:%M:%S')] 🚀 收盘管道启动" >> $LOG
 
-# [1/9] 基础数据：daily_basic + moneyflow + margin_detail + 指数日线
-# 由 close_pipeline.py 统一执行（margin_detail 自带T+1~T+2自等待逻辑）
+# [1/9] 基础数据:daily_basic + moneyflow + margin_detail + 指数日线
+# 由 close_pipeline.py 统一执行(margin_detail 自带T+1~T+2自等待逻辑)
 echo "[1/9] 拉取 daily_kline + daily_basic + moneyflow + margin_detail + 指数日线..." >> $LOG
 python3 close_pipeline.py >> $LOG 2>&1
 
@@ -40,6 +40,7 @@ if str(last_ti) >= td:
 else:
     from datetime import datetime
     td_fmt = datetime.strptime(td, '%Y-%m-%d').strftime('%Y%m%d')
+    saved = 0
     import signal
     class TimeoutError(Exception): pass
     def handler(signum, frame): raise TimeoutError('stk_factor超时')
@@ -56,14 +57,14 @@ else:
         signal.alarm(0)
         print(f'  ⚠️ stk_factor失败: {str(e)[:60]}, 跳过')
         saved = -1
-
+    
     if saved < 0:
         pass  # 已经超时/出错了
     else:
         saved = 0
         for _, r in df.iterrows():
             try:
-                c.execute('''INSERT INTO technical_indicator 
+                c.execute('''INSERT INTO technical_indicator
                 (ts_code, trade_date, ma_5, ma_10, ma_20, ma_60, ma_120, ma_250,
                  rsi_12, macd_dif, macd_dea, atr_14, boll_upper, boll_mid, boll_lower,
                  volume_ratio)
@@ -120,23 +121,23 @@ else:
     v2_c.execute('SELECT ts_code FROM watch_pool')
     codes = [r['ts_code'] for r in v2_c.fetchall()]
     print(f'  开始分析{len(codes)}只股票...')
-    
+
     from engine.chanlun_analyzer import analyze_chanlun
-    
+
     done = 0
     for code in codes:
         try:
-            v2_c.execute('''SELECT trade_date, open, high, low, close, vol FROM daily_kline 
+            v2_c.execute('''SELECT trade_date, open, high, low, close, vol FROM daily_kline
                 WHERE ts_code=%s ORDER BY trade_date ASC''', (code,))
             rows = v2_c.fetchall()
             if len(rows) < 60: continue
-            
+
             ohlc = [{'trade_date':str(r['trade_date']),'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'vol':float(r['vol'])} for r in rows]
-            
+
             result = analyze_chanlun(code, td, ohlc)
             if not result or 'error' in result: continue
-            
-            v2_c.execute('''INSERT INTO chanlun_structure 
+
+            v2_c.execute('''INSERT INTO chanlun_structure
                 (ts_code, trade_date, analysis_level,
                  top_fractal_cnt, bottom_fractal_cnt,
                  bi_direction, bi_strength,
@@ -245,12 +246,12 @@ print(f'  快照入库: {saved}条 ✅', flush=True)
 c.close(); conn.close()
 PYEOF
 
-# [6/9] 打板（涨停）数据刷新
+# [6/9] 打板(涨停)数据刷新
 printf '  [6/9] 打板数据刷新...\n' >> $LOG
 cd "$(dirname "$0")"
 python3 scripts/refresh_dragon_data.py >> $LOG 2>&1
 
-# [7/9] 打板评分快照 — 从dragon API取当日涨停股完整评分写入快照表
+# [7/9] 打板评分快照 - 从dragon API取当日涨停股完整评分写入快照表
 printf '  [7/9] 打板评分快照...\n' >> $LOG
 cd "$(dirname "$0")"
 python3 -c "
@@ -263,7 +264,7 @@ try:
     data = r.json().get('data', {})
     rows = data.get('data', [])
     td = data.get('trade_date', '')
-    
+
     if not rows:
         print(f'  打板快照: 无涨停数据(交易日{td})', flush=True)
     else:
@@ -271,7 +272,7 @@ try:
         c = conn.cursor()
         saved = 0
         for s in rows:
-            c.execute('''INSERT INTO dragon_snapshot 
+            c.execute('''INSERT INTO dragon_snapshot
                 (trade_date, ts_code, name, change_pct, limit_up_time, reason,
                  dragon_score, action_level, action,
                  momentum, mf_score, trend, pos_score, margin_score,
@@ -359,7 +360,7 @@ td = str(c.fetchone()['MAX(trade_date)'])
 c.execute("""SELECT p.id, p.ts_code, p.name, p.cost_price, p.shares FROM portfolio_holdings p
     WHERE p.status='HOLDING' AND p.shares > 0""")
 holdings = c.fetchall()
-print(f'  刷新{len(holdings)}只持仓现价（最新交易日: {td}）', flush=True)
+print(f'  刷新{len(holdings)}只持仓现价(最新交易日: {td})', flush=True)
 
 updated = 0
 for h in holdings:
