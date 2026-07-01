@@ -1,0 +1,22 @@
+[Unit]
+Description=Stock System v2 - Port 8891
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/stock-system-v2/backend
+Environment=PYTHONPATH=/root/stock-system-v2/backend
+Environment=PORT=8891
+Environment=DB_NAME=stock_db_v2
+Environment=FRONTEND_DIR=/var/www/html/stock-v2
+Environment=TUSHARE_TOKEN=d2b88da51a08626fd23b7be11418c593ccdee21a94d2e2aef4a334ad
+ExecStart=/root/stock-system-v2/venv/bin/python app_main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/tmp/stock_system_v2.log
+StandardError=append:/tmp/stock_system_v2.log
+
+[Install]
+WantedBy=multi-user.target

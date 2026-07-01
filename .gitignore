@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+venv/
+.venv/
+.DS_Store
+engines_archive/
+*.bak
+.gitignore
+# db_backup 由 git-lfs 追踪

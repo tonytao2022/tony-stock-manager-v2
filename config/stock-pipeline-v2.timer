@@ -1,0 +1,10 @@
+[Unit]
+Description=Stock System v2 Daily Pipeline Timer (17:00)
+Requires=stock-pipeline-v2.service
+
+[Timer]
+OnCalendar=Mon-Fri 17:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

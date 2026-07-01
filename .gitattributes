@@ -1,0 +1,2 @@
+db_backup/*.sql.gz filter=lfs diff=lfs merge=lfs -text
+db_backup/*.sql filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,94 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>🏆 全量评分排行 - 股票智能分析 v2</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bg6:#1a2235;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--h:56px;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);overflow-y:auto}
+.top{background:var(--bg2);border-bottom:1px solid var(--bd);padding:0 24px;height:var(--h);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.top .l{display:flex;align-items:center;gap:12px}.top .l a{color:var(--accent);text-decoration:none;font-size:.85em}.top .r{font-size:.82em;color:var(--t3)}
+h1{font-size:1.1em;font-weight:600}
+.c{max-width:1400px;margin:0 auto;padding:20px}
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.bar input,.bar select{background:var(--bg6);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:6px;font-size:.82em;height:34px}
+.bar .q{flex:1;min-width:120px;max-width:200px}
+.bar .sm{margin-left:auto;font-size:.82em;color:var(--t3);white-space:nowrap}
+.card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--bd);padding:16px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:.82em}
+th,td{padding:7px 8px;border-bottom:1px solid var(--bd);text-align:left}
+th{color:var(--t3);font-weight:600;position:sticky;top:0;background:var(--bg3);white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--t1)}th.srt{color:var(--accent)}
+tr:hover td{background:var(--bg4)}
+.sb{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-weight:600}
+.sb1{background:#047857;color:#a7f3d0}.sb2{background:#065f46;color:#6ee7b7}.sb3{background:#78350f;color:#fbbf24}.sb4{background:#1e293b;color:#94a3b8}.sb5{background:#7f1d1d;color:#fca5a5}
+.pg{display:flex;gap:4px;justify-content:center;align-items:center;margin-top:12px;flex-wrap:wrap}
+.pg button{padding:4px 10px;border-radius:4px;border:1px solid var(--bd);background:var(--bg6);color:var(--t2);cursor:pointer;font-size:.82em}
+.pg button:hover{background:var(--bg4)}.pg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pg .info{font-size:.78em;color:var(--t3);margin-left:8px}
+.loading{text-align:center;padding:60px;color:var(--t3)}.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.bx{text-align:center;padding:8px;background:var(--bg4);border-radius:6px}.bx .no{font-size:1.2em;font-weight:700;color:var(--accent)}.bx .lb{font-size:.72em;color:var(--t3);margin-top:2px}
+.sn{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.72em}
+.sn-spr{background:#065f46;color:#6ee7b7}.sn-sum{background:#047857;color:#a7f3d0}.sn-aut{background:#78350f;color:#fbbf24}.sn-win{background:#1e3a5f;color:#93c5fd}.sn-cha{background:#4a1942;color:#f0abfc}
+@media(max-width:768px){.bar{gap:4px}.bar .q{max-width:120px}}
+</style>
+</head><body>
+<div class=top><div class=l><a href=/stock-v2/>← 返回</a><h1>🏆 全量评分排行</h1></div><div class=r id=topDate></div></div>
+<div class=c>
+<div class=card>
+<div class=bar>
+<input class=q id=q placeholder="🔍 代码或名称..." oninput=render(1)>
+<select id=sf onchange=render(1)><option value="">📋 全部信号</option><option value=STRONG_BUY>🟢 强烈买入</option><option value=BUY>🔵 买入</option><option value=CAUTIOUS_BUY>🟡 谨慎买入</option><option value=HOLD>⚪ 持有</option><option value=SELL>🔴 卖出</option></select>
+<select id=sea onchange=render(1)><option value="">🌏 全部季节</option><option value=spring>🌺 春季</option><option value=summer>☀️ 夏季</option><option value=autumn>🍂 秋季</option><option value=winter>❄️ 冬季</option><option value=chaos>🌪️ 混沌</option></select>
+<span class=sm id=sum></span>
+</div>
+<div class=g3><div class=bx><div class=no id=t1>--</div><div class=lb>监控池总数</div></div><div class=bx><div class=no id=t2>--</div><div class=lb>强买+买入</div></div><div class=bx><div class=no id=t3>--</div><div class=lb>买入占比</div></div></div>
+<div style="max-height:600px;overflow-y:auto"><table><thead><tr>
+<th onclick=s(1)>#</th><th onclick=s(2)>代码</th><th onclick=s(3)>名称</th><th onclick=s(4)>行业</th>
+<th class=srt onclick=s(5) id=h5>评分 ↑↓</th><th onclick=s(6)>趋势</th><th onclick=s(7)>动量</th><th onclick=s(8)>结构</th><th onclick=s(9)>情绪</th>
+<th onclick=s(10)>信号</th><th>季节</th><th title=当前市场恒纪元/混沌纪元状态>市场</th><th title=安全闸门：混沌期自动锁定买入>闸门</th>
+</tr></thead><tbody id=tb></tbody></table></div>
+<div class=pg id=pg></div>
+</div></div>
+<script>
+const AK="90a275cbcc004fd5";
+function apiFetch(u,o){if(!o)o={};if(!o.headers)o.headers={};o.headers["X-API-Key"]=AK;return fetch(u,o)}
+
+// 季节中英文映射
+const SM={'spring':'🌺春季','summer':'☀️夏季','autumn':'🍂秋季','winter':'❄️冬季','chaos':'🌪️混沌','chaos_spring':'🌤️春混沌','chaos_autumn':'🌥️秋混沌','panic':'💀恐慌','recovery':'🌱复苏'}
+const SN={'spring':'sn-spr','summer':'sn-sum','autumn':'sn-aut','winter':'sn-win','chaos':'sn-cha'}
+const PG=50;let D=[],TD='',SI=5,SA='desc';
+
+async function load(){
+document.getElementById('tb').innerHTML='<tr><td colspan=13 style=text-align:center;padding:40px><div class=spinner></div></td></tr>'
+let r=await fetch('/stock-v2/api/v2/strategy/signals?limit=0');let d=await r.json();D=d.data?.signals||[];TD=d.data?.trade_date||'';
+// 补充纪元数据（从season_state）
+r=await fetch('/stock-v2/api/v2/dashboard');d=await r.json();let mkt=d.data?.market||{};
+const era=mkt.hengjiyuan_level||'';const eraSc=mkt.hengjiyuan_score||0;
+// 纪元信息写到全局
+D.era=era;D.eraSc=eraSc;
+document.getElementById('topDate').textContent='📅 '+TD+(era?' · '+era+' '+eraSc:'');render(1);}
+
+function render(p){
+const q=document.getElementById('q').value.toLowerCase(),sf=document.getElementById('sf').value,sea=document.getElementById('sea').value;
+let arr=D.filter(s=>{if(sf&&s.signal_type!==sf)return false;if(sea&&s.season!==sea)return false;const n=(s.name||'').toLowerCase(),c=(s.ts_code||'').toLowerCase();return!q||n.includes(q)||c.includes(q)});
+const keys={1:'idx',2:'ts_code',3:'name',4:'industry',5:'calibrated_score',6:'trend_score',7:'momentum_score',8:'structure_score',9:'emotion_score',10:'signal_type',11:'season',12:'hengjiyuan_level'};
+const k=keys[SI]||'calibrated_score';const asc=SA==='asc';
+arr.sort((a,b)=>{let va=a[k]||0,vb=b[k]||0;if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase()}return asc?va>vb?1:va<vb?-1:0:va<vb?1:va>vb?-1:0});
+const sb=D.filter(x=>x.signal_type==='STRONG_BUY'||x.signal_type==='BUY').length;
+document.getElementById('t1').textContent=D.length;document.getElementById('t2').textContent=sb;
+document.getElementById('t3').textContent=D.length>0?(sb/D.length*100).toFixed(1)+'%':'0%';
+const tp=Math.ceil(arr.length/PG);if(p>tp)p=tp||1;const st=(p-1)*PG,ed=st+PG,pd=arr.slice(st,ed);
+document.getElementById('sum').textContent='共 '+arr.length+' 条，第'+p+'/'+tp+'页';
+document.getElementById('tb').innerHTML=pd.map((s,i)=>{
+const sc=s.calibrated_score||0;const tr=s.trend_score||0;const mo=s.momentum_score||0;const st2=s.structure_score||0;const em=s.emotion_score||0;
+const stl=s.signal_type||'';const stc=stl==='STRONG_BUY'?'sb1':stl==='BUY'?'sb2':stl==='CAUTIOUS_BUY'?'sb3':stl==='SELL'?'sb5':'sb4';
+const gt=s.gate_triggered?'🔒':'✅';
+const sea2=s.season||'';const seaCn=SM[sea2]||sea2;const seaCl=SN[sea2]||'sn-cha';
+
+return '<tr><td style=color:var(--t3)>'+(st+1+i)+'</td><td style=font-size:.8em;color:var(--t3)>'+s.ts_code+'</td><td style=font-weight:600>'+s.name+'</td><td style=font-size:.78em;color:var(--t3)>'+(s.industry||'')+'</td><td><b>'+(sc.toFixed(1))+'</b></td><td>'+tr.toFixed(1)+'</td><td>'+mo.toFixed(1)+'</td><td>'+st2.toFixed(1)+'</td><td>'+em.toFixed(1)+'</td><td><span class="sb '+stc+'">'+(s.signal_label||stl)+'</span></td><td><span class="sn '+seaCl+'">'+seaCn+'</span></td><td style=font-size:.78em>'+(D.era||'混沌')+'</td><td>'+gt+'</td></tr>'}).join('')||'<tr><td colspan=13 style=text-align:center;color:var(--t3);padding:40px>暂无评分数据</td></tr>';
+let ph='';const ms=Math.min(tp,20);for(let i=1;i<=ms;i++)ph+='<button class="'+(i===p?'on':'')+'" onclick=render('+i+')>'+i+'</button>';
+if(tp>20)ph+='<span class=info>…'+tp+'页</span>';else ph+='<span class=info>'+tp+'页</span>';
+document.getElementById('pg').innerHTML=ph;}
+function s(n){if(SI===n){SA=SA==='desc'?'asc':'desc'}else{SI=n;SA='desc'}
+for(let i=1;i<=13;i++){const e=document.getElementById('h'+i);if(e)e.className=''}const e2=document.getElementById('h'+n);if(e2)e2.className='srt';render(1)}
+load();
+</script></body></html>

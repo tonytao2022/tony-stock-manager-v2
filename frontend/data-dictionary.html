@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📖 数据字典 — 股票智能分析系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#c8d6e5;min-height:100vh}
+.container{max-width:1000px;margin:0 auto;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #1e2a3a;margin-bottom:20px}
+.header h1{font-size:22px;color:#fff}
+.header .info{font-size:13px;color:#6b7f9e}
+.card{background:linear-gradient(145deg,#141e30,#1a2744);border-radius:12px;padding:16px;margin-bottom:10px;border:1px solid #1e2a3a;cursor:pointer;transition:all .2s}
+.card:hover{transform:translateY(-1px)}
+.card-title{font-size:14px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;color:#6b7f9e;border-bottom:1px solid #1e2a3a;font-weight:600;font-size:12px}
+td{padding:8px 10px;border-bottom:1px solid rgba(30,42,58,0.5)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.en{color:#3498db;font-family:monospace;font-size:12px}
+.cn{font-weight:600;color:#fff}
+.desc{font-size:12px;color:#6b7f9e}
+.loading{text-align:center;padding:60px}
+.spinner{width:32px;height:32px;border:3px solid #1e2a3a;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.toolbar select{padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px;min-width:160px}
+.toolbar select:focus{outline:none;border-color:#3498db}
+.toolbar input{flex:1;min-width:200px;padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px}
+.toolbar input:focus{outline:none;border-color:#3498db}
+.empty{text-align:center;padding:40px;color:#6b7f9e}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header" style=display:flex;align-items:center>
+    <a href=/stock-v2/ style=color:var(--accent);text-decoration:none;font-size:.85em;margin-right:12px>← 返回驾驶舱</a>
+    <div style=margin-left:10px><h1>📖 数据字典</h1><span class="info">系统内中英文术语对照表</span></div>
+    <span class="info" id="totalInfo" style=margin-left:auto>加载中...</span>
+  </div>
+  <div class="toolbar">
+    <select id="catFilter" onchange="load()">
+      <option value="">全部分类</option>
+    </select>
+    <input id="keyword" placeholder="搜索英文/中文..." oninput="doFilter()">
+  </div>
+  <div id="app"><div class="loading"><div class="spinner"></div><div>加载...</div></div></div>
+</div>
+<script>
+const CAT_NAMES = {
+  'season':'🌡️ 季节','hengjiyuan':'🌀 恒纪元','regime':'📊 市场体制','scoring_strategy':'🎯 评分策略',
+  'signal_type':'📶 信号类型','exit_reason':'🚪 退出原因','operation_mode':'⚙️ 操作模式',
+  'buy_sell_point':'🎯 买卖点','track':'🛤️ 轨道','zoushi_type':'📈 走势类型',
+  'beichi_type':'🔁 背驰类型','capital_type':'💰 资金类型','chaos_subtype':'🌪️ 混沌子类型'
+};
+var allData = [];
+
+async function load(){
+  const r = await fetch('/stock-v2/api/v2/system/data-dictionary').then(r=>r.json());
+  allData = r.data?.items || [];
+  document.getElementById('totalInfo').textContent = allData.length + ' 条';
+  
+  // 填充分类筛选
+  var groups = r.data?.grouped || [];
+  var sel = document.getElementById('catFilter');
+  sel.innerHTML = '<option value="">全部分类</option>';
+  groups.forEach(function(g){
+    sel.innerHTML += '<option value="'+g.category+'">'+(CAT_NAMES[g.category]||g.category)+' ('+g.items.length+'项)</option>';
+  });
+  
+  render(allData);
+}
+
+function doFilter(){
+  var kw = document.getElementById('keyword').value.trim().toLowerCase();
+  var filtered = allData;
+  if(kw){
+    filtered = allData.filter(function(item){
+      return item.en_key.toLowerCase().includes(kw) || item.cn_value.includes(kw) || (item.description||'').includes(kw);
+    });
+  }
+  render(filtered);
+}
+
+function render(items){
+  var selCat = document.getElementById('catFilter').value;
+  if(selCat) items = items.filter(function(i){return i.category===selCat;});
+  
+  var app = document.getElementById('app');
+  if(items.length===0){
+    app.innerHTML = '<div class=empty>无匹配数据</div>';
+    return;
+  }
+  
+  // 按分类分组
+  var groups = {};
+  items.forEach(function(item){
+    if(!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+  });
+  
+  var html = '';
+  Object.keys(groups).sort().forEach(function(cat){
+    var g = groups[cat];
+    var catName = CAT_NAMES[cat] || cat;
+    html += '<div class=card onclick="toggleGroup(this)"><div class=card-title><span>'+catName+'</span><span style=font-size:12px;color:#6b7f9e>'+g.length+'项</span></div>';
+    html += '<div class=group-content style=display:none><table><tr><th>英文键</th><th>中文值</th><th>说明</th></tr>';
+    g.forEach(function(item){
+      html += '<tr><td class=en>'+item.en_key+'</td><td class=cn>'+item.cn_value+'</td><td class=desc>'+(item.description||'')+'</td></tr>';
+    });
+    html += '</table></div></div>';
+  });
+  
+  app.innerHTML = html;
+}
+
+function toggleGroup(el){
+  var content = el.querySelector('.group-content');
+  content.style.display = content.style.display==='none'?'block':'none';
+}
+
+load();
+</script>
+</body>
+</html>

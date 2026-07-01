@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回测池管理 — 股票智能分析系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#c8d6e5;min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #1e2a3a;margin-bottom:20px}
+.header h1{font-size:22px;color:#fff}
+.header .info{font-size:13px;color:#6b7f9e}
+.card{background:linear-gradient(145deg,#141e30,#1a2744);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #1e2a3a}
+.card-title{font-size:14px;color:#8a9bb5;margin-bottom:12px;font-weight:600}
+.toolbar{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.toolbar input{flex:1;min-width:200px;padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px}
+.toolbar input:focus{outline:none;border-color:#3498db}
+.toolbar select{padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#fff}
+.btn-primary{background:#3498db}
+.btn-primary:hover{background:#2980b9}
+.btn-success{background:#2ecc71}
+.btn-success:hover{background:#27ae60}
+.btn-danger{background:#e74c3c}
+.btn-danger:hover{background:#c0392b}
+.btn-ghost{background:transparent;border:1px solid #1e2a3a;color:#8a9bb5}
+.btn-ghost:hover{border-color:#3498db;color:#fff}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:12px;color:#6b7f9e;border-bottom:1px solid #1e2a3a;font-weight:600;cursor:pointer;user-select:none}
+th:hover{color:#8a9bb5}
+th .sort{font-size:10px;margin-left:4px}
+td{padding:10px 12px;font-size:13px;border-bottom:1px solid rgba(30,42,58,0.5)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.pagination{display:flex;justify-content:center;gap:6px;margin-top:16px}
+.pg-btn{width:32px;height:32px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#8a9bb5;cursor:pointer;font-size:13px}
+.pg-btn:hover{border-color:#3498db;color:#fff}
+.pg-btn.active{background:#3498db;border-color:#3498db;color:#fff}
+.empty{text-align:center;padding:40px;color:#6b7f9e;font-size:14px}
+.loading{text-align:center;padding:40px}
+.spinner{width:32px;height:32px;border:3px solid #1e2a3a;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.msg{position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .3s;z-index:100}
+.msg.show{opacity:1}
+.msg.success{background:#1a4a2e;color:#2ecc71;border:1px solid #2ecc71}
+.msg.error{background:#4a1a1a;color:#e74c3c;border:1px solid #e74c3c}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.tag.active{background:rgba(46,204,113,0.15);color:#2ecc71}
+.tag.removed{background:rgba(231,76,60,0.15);color:#e74c3c}
+.batch-input{width:100%;height:120px;padding:10px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:13px;resize:vertical;font-family:monospace}
+.batch-input:focus{outline:none;border-color:#3498db}
+.code-link{color:#3498db;text-decoration:none}
+.code-link:hover{color:#5dade2}
+</style>
+</head>
+<body>
+<div class="msg" id="msg"></div>
+<div class="container">
+  <div class="header" style=display:flex;align-items:center>
+    <a href=/stock-v2/ style=color:var(--accent);text-decoration:none;font-size:.85em;margin-right:12px>← 返回驾驶舱</a>
+    <h1>🔄 回测池管理</h1>
+    <span class="info" id="totalInfo" style=margin-left:auto>加载中...</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔍 筛选与操作</div>
+    <div class="toolbar">
+      <input id="keyword" placeholder="输入代码或名称搜索..." oninput="search()">
+      <select id="sortField" onchange="search()">
+        <option value="ts_code">按代码排序</option>
+        <option value="name">按名称排序</option>
+        <option value="industry">按行业排序</option>
+        <option value="status">按状态排序</option>
+      </select>
+      <button class="btn btn-primary" onclick="showAddModal()">➕ 添加</button>
+      <button class="btn btn-success" onclick="showBatchModal()">📋 批量导入</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table>
+        <tr>
+          <th onclick="sortBy('ts_code')">代码 <span class="sort">↕</span></th>
+          <th onclick="sortBy('name')">名称 <span class="sort">↕</span></th>
+          <th onclick="sortBy('industry')">行业 <span class="sort">↕</span></th>
+          <th onclick="sortBy('market')">市场 <span class="sort">↕</span></th>
+          <th onclick="sortBy('status')">状态 <span class="sort">↕</span></th>
+          <th>操作</th>
+        </tr>
+        <tbody id="stockList"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+<!-- 添加单个对话框 -->
+<div id="addModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center">
+  <div style="background:#141e30;border-radius:12px;padding:24px;width:400px;border:1px solid #1e2a3a">
+    <h3 style="color:#fff;margin-bottom:16px">➕ 添加股票</h3>
+    <div style="margin-bottom:12px"><label style="font-size:13px;color:#8a9bb5;display:block;margin-bottom:4px">股票代码</label>
+    <input id="addCode" style="width:100%;padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px" placeholder="例: 000001.SZ"></div>
+    <div style="margin-bottom:12px"><label style="font-size:13px;color:#8a9bb5;display:block;margin-bottom:4px">股票名称（可选）</label>
+    <input id="addName" style="width:100%;padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px" placeholder="例: 平安银行"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('addModal')">取消</button>
+      <button class="btn btn-success" onclick="addStock()">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批量导入对话框 -->
+<div id="batchModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center">
+  <div style="background:#141e30;border-radius:12px;padding:24px;width:500px;border:1px solid #1e2a3a">
+    <h3 style="color:#fff;margin-bottom:16px">📋 批量导入</h3>
+    <div style="margin-bottom:8px"><label style="font-size:13px;color:#8a9bb5;display:block;margin-bottom:4px">每行一个股票代码+名称（用逗号或空格分隔）</label>
+    <textarea id="batchInput" class="batch-input" placeholder="000001.SZ 平安银行&#10;000002.SZ 万科A&#10;000004.SZ 国华网安"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('batchModal')">取消</button>
+      <button class="btn btn-success" onclick="batchAdd()">批量添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/stock-v2/api/v2/backtest-pool';
+let curPage = 1, curKeyword = '', curSort = 'ts_code', total = 0, pageSize = 50;
+
+function msg(t, type) {
+  const el = document.getElementById('msg');
+  el.textContent = t; el.className = 'msg show ' + type;
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function showAddModal() { document.getElementById('addModal').style.display = 'flex'; }
+function showBatchModal() { document.getElementById('batchModal').style.display = 'flex'; }
+
+function sortBy(field) {
+  curSort = field;
+  document.getElementById('sortField').value = field;
+  load();
+}
+
+async function load() {
+  const kw = document.getElementById('keyword').value.trim();
+  const sf = document.getElementById('sortField').value;
+  curKeyword = kw; curSort = sf;
+  
+  const r = await fetch(API + '/list?page=' + curPage + '&page_size=' + pageSize + '&keyword=' + encodeURIComponent(kw));
+  const d = await r.json();
+  const stocks = d.data.stocks || [];
+  total = d.data.total || 0;
+  
+  document.getElementById('totalInfo').textContent = '共 ' + total + ' 只股票';
+  
+  const tbody = document.getElementById('stockList');
+  if (stocks.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">无数据</td></tr>';
+  } else {
+    // 排序（客户端）
+    stocks.sort(function(a,b) {
+      var va = (a[curSort] || '').toLowerCase();
+      var vb = (b[curSort] || '').toLowerCase();
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    });
+    
+    tbody.innerHTML = stocks.map(function(s) {
+      var st = s.status || 'ACTIVE';
+      var stTag = st === 'ACTIVE' ? '<span class="tag active">✅ 启用</span>' : '<span class="tag removed">⏹ 停用</span>';
+      return '<tr><td><a class="code-link" href="http://43.128.119.244/stock-v2/scores.html?q=' + s.ts_code + '" target="_blank">' + s.ts_code + '</a></td><td>' + (s.name || '') + '</td><td>' + (s.industry || '') + '</td><td>' + (s.market || '') + '</td><td>' + stTag + '</td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="removeStock(\'' + s.ts_code + '\')">删除</button></td></tr>';
+    }).join('');
+  }
+  
+  // 分页
+  var totalPages = Math.ceil(total / pageSize);
+  var pg = document.getElementById('pagination');
+  var pgHtml = '';
+  for (var i = 1; i <= Math.min(totalPages, 10); i++) {
+    pgHtml += '<button class="pg-btn' + (i === curPage ? ' active' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+  }
+  pg.innerHTML = pgHtml;
+}
+
+function goPage(p) { curPage = p; load(); }
+
+function search() {
+  curPage = 1;
+  load();
+}
+
+async function addStock() {
+  var code = document.getElementById('addCode').value.trim();
+  var name = document.getElementById('addName').value.trim();
+  if (!code) { msg('请输入股票代码', 'error'); return; }
+  
+  var r = await fetch(API + '/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ts_code: code, name: name})
+  }).then(r => r.json());
+  
+  if (r.code === 0) {
+    msg('✅ ' + code + ' 已添加', 'success');
+    closeModal('addModal');
+    document.getElementById('addCode').value = '';
+    document.getElementById('addName').value = '';
+    load();
+  } else {
+    msg(r.message || '添加失败', 'error');
+  }
+}
+
+async function removeStock(code) {
+  if (!confirm('确认删除 ' + code + ' 吗？')) return;
+  var r = await fetch(API + '/remove', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ts_code: code})
+  }).then(r => r.json());
+  
+  if (r.code === 0) {
+    msg('🗑️ ' + code + ' 已删除', 'success');
+    load();
+  } else {
+    msg(r.message || '删除失败', 'error');
+  }
+}
+
+async function batchAdd() {
+  var text = document.getElementById('batchInput').value.trim();
+  if (!text) { msg('请输入股票代码', 'error'); return; }
+  
+  var lines = text.split('\n').filter(function(l) { return l.trim(); });
+  var codes = [];
+  var errors = [];
+  
+  for (var i = 0; i < lines.length; i++) {
+    var parts = lines[i].trim().split(/[,\s]+/);
+    var code = parts[0] ? parts[0].trim().toUpperCase() : '';
+    var name = parts[1] ? parts.slice(1).join(' ').trim() : '';
+    if (code && /^\d{6}\.(SZ|SH)$/i.test(code)) {
+      codes.push({ts_code: code, name: name});
+    } else {
+      errors.push('第' + (i+1) + '行格式错误: ' + lines[i].trim());
+    }
+  }
+  
+  if (codes.length === 0) { msg('无有效股票', 'error'); return; }
+  
+  var r = await fetch(API + '/batch-add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({codes: codes})
+  }).then(r => r.json());
+  
+  var info = '✅ 成功添加 ' + (r.data ? r.data.added : r.added || 0) + ' 只';
+  if (errors.length > 0) info += '，' + errors.length + '行格式错误';
+  msg(info, 'success');
+  closeModal('batchModal');
+  document.getElementById('batchInput').value = '';
+  load();
+}
+
+// 初始化
+load();
+</script>
+</body>
+</html>

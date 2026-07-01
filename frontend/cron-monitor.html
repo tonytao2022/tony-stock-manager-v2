@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cron任务监控 - 股票智能分析管理系统</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+:root {
+  --bg-primary: #0a0e17; --bg-secondary: #111827; --bg-card: #161d2a; --bg-card-hover: #1c2538;
+  --bg-sidebar: #0d1321; --bg-input: #1a2235; --bg-tooltip: #1e293b;
+  --border-color: #1e2d4a; --border-light: #253a5e; --border-accent: #3b82f6;
+  --text-primary: #e2e8f0; --text-secondary: #94a3b8; --text-muted: #64748b; --text-bright: #ffffff;
+  --color-bull: #ef4444; --color-bear: #22c55e;
+  --color-ok: #22c55e; --color-warn: #f59e0b; --color-error: #ef4444; --color-na: #6b7280;
+  --sidebar-width: 240px; --header-height: 56px; --radius: 8px; --radius-sm: 4px; --radius-lg: 12px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4); --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.5);
+  --transition: 0.2s ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Helvetica Neue',Arial,sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.5;overflow-y:auto;overflow-x:hidden;min-height:100vh}
+.app-layout{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar-width);min-width:var(--sidebar-width);background:var(--bg-sidebar);border-right:1px solid var(--border-color);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;overflow-y:auto}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border-color)}
+.sidebar-logo .title{font-size:15px;font-weight:700;color:var(--text-bright);letter-spacing:0.5px}
+.sidebar-logo .subtitle{font-size:11px;color:var(--text-muted);margin-top:4px}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text-secondary);font-size:14px;transition:all var(--transition);border-left:3px solid transparent;margin:2px 0;text-decoration:none}
+.nav-item:hover{background:var(--bg-card);color:var(--text-primary)}
+.nav-item.active{background:var(--bg-card);color:var(--text-bright);border-left-color:var(--border-accent);font-weight:600}
+.nav-item .nav-icon{font-size:18px;width:24px;text-align:center}
+.nav-section-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);padding:8px 20px 4px;font-weight:700}
+.sidebar-footer{padding:12px 20px;border-top:1px solid var(--border-color);font-size:11px;color:var(--text-muted)}
+.main-content{flex:1;margin-left:var(--sidebar-width);padding:0;min-height:100vh}
+.top-bar{position:sticky;top:0;z-index:50;background:var(--bg-secondary);border-bottom:1px solid var(--border-color);padding:0 24px;height:var(--header-height);display:flex;align-items:center;justify-content:space-between}
+.top-bar .breadcrumb{font-size:16px;font-weight:600;color:var(--text-bright)}
+.top-bar .update-info{display:flex;align-items:center;gap:16px;font-size:13px}
+.page-content{padding:20px 24px}
+
+/* ─── 卡片网格 ─── */
+.monitor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:24px}
+.monitor-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:20px;transition:all var(--transition);position:relative;overflow:hidden}
+.monitor-card:hover{background:var(--bg-card-hover);border-color:var(--border-light);box-shadow:var(--shadow-card-hover)}
+.monitor-card .status-bar{position:absolute;top:0;left:0;right:0;height:4px}
+.monitor-card .status-bar.ok{background:var(--color-ok)}
+.monitor-card .status-bar.warn{background:var(--color-warn)}
+.monitor-card .status-bar.error{background:var(--color-error)}
+.monitor-card .status-bar.not_run{background:var(--color-na)}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.card-title{font-size:15px;font-weight:600;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+.card-subtitle{font-size:12px;color:var(--text-muted);margin-top:2px}
+.status-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+.status-pill.ok{background:rgba(34,197,94,0.15);color:var(--color-ok);border:1px solid rgba(34,197,94,0.3)}
+.status-pill.warn{background:rgba(245,158,11,0.15);color:var(--color-warn);border:1px solid rgba(245,158,11,0.3)}
+.status-pill.error{background:rgba(239,68,68,0.15);color:var(--color-error);border:1px solid rgba(239,68,68,0.3)}
+.status-pill.not_run{background:rgba(107,114,128,0.15);color:var(--color-na);border:1px solid rgba(107,114,128,0.3)}
+.card-body{font-size:13px;color:var(--text-secondary);line-height:1.8}
+.card-body .row{display:flex;align-items:center;gap:8px;padding:4px 0}
+.card-body .row .label{color:var(--text-muted);min-width:80px;flex-shrink:0}
+.card-body .row .value{color:var(--text-primary);font-weight:500}
+.disk-bar{display:flex;align-items:center;gap:10px;margin-top:8px}
+.disk-bar-track{flex:1;height:10px;background:var(--bg-secondary);border-radius:5px;overflow:hidden}
+.disk-bar-fill{height:100%;border-radius:5px;transition:width 0.4s ease}
+.disk-bar-fill.ok{background:var(--color-ok)}
+.disk-bar-fill.warn{background:var(--color-warn)}
+.disk-bar-fill.error{background:var(--color-error)}
+.disk-details{display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--text-muted)}
+.disk-details span{display:flex;align-items:center;gap:4px}
+
+/* ─── 服务指示灯 ─── */
+.service-light{display:inline-flex;align-items:center;gap:6px}
+.service-light .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.service-light .dot.ok{background:var(--color-ok);box-shadow:0 0 8px rgba(34,197,94,0.5)}
+.service-light .dot.error{background:var(--color-error);box-shadow:0 0 8px rgba(239,68,68,0.5)}
+
+/* ─── 摘要横幅 ─── */
+.summary-banner{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap}
+.summary-item{background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);padding:16px 20px;flex:1;min-width:120px;text-align:center}
+.summary-item .num{font-size:28px;font-weight:700;margin-bottom:4px}
+.summary-item .num.ok{color:var(--color-ok)}
+.summary-item .num.warn{color:var(--color-warn)}
+.summary-item .num.error{color:var(--color-error)}
+.summary-item .num.not_run{color:var(--color-na)}
+.summary-item .label{font-size:12px;color:var(--text-muted)}
+
+/* ─── 刷新控件 ─── */
+.top-actions{display:flex;align-items:center;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);transition:all var(--transition)}
+.btn:hover{background:var(--bg-card-hover);border-color:var(--border-light)}
+.btn.primary{background:var(--border-accent);border-color:var(--border-accent);color:#fff}
+.btn.primary:hover{background:#2563eb}
+.auto-refresh-badge{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px}
+.auto-refresh-badge .pulse{width:6px;height:6px;border-radius:50%;background:var(--color-ok);animation:pulse 2s infinite}
+@keyframes pulse{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:80px 20px;color:var(--text-muted);flex-direction:column;gap:12px}
+.spinner{width:32px;height:32px;border:3px solid var(--border-color);border-top-color:var(--border-accent);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-state{text-align:center;padding:60px 20px;color:var(--color-error)}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <!-- ═══ 侧边栏 ═══ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="title">📊 股票智能分析</div>
+      <div class="subtitle">管理端 v1.0</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">📋 系统监控</div>
+      <a class="nav-item active" href="cron-monitor.html"><span class="nav-icon">⏱️</span> 任务监控</a>
+      <a class="nav-item" href="index.html"><span class="nav-icon">🏠</span> 返回首页</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="service-light" id="sidebar-status"><span class="dot ok"></span> 系统运行中</span>
+    </div>
+  </aside>
+
+  <!-- ═══ 主内容 ═══ -->
+  <div class="main-content">
+    <div class="top-bar">
+      <div class="breadcrumb">⏱️ Cron任务监控</div>
+      <div class="top-actions">
+        <span class="auto-refresh-badge"><span class="pulse"></span> 30秒自动刷新</span>
+        <button class="btn primary" onclick="refreshNow()">🔄 立即刷新</button>
+      </div>
+    </div>
+    <div class="page-content" id="app">
+      <!-- 摘要 -->
+      <div class="summary-banner" id="summary-banner"></div>
+      <!-- 卡片网格 -->
+      <div class="monitor-grid" id="card-grid">
+        <div class="loading"><div class="spinner"></div>加载监控数据...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ API 调用 ═══
+const API_URL = '/stock-v2/api/v2/system/cron-status';
+let autoRefreshTimer = null;
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(API_URL + '?_t=' + Date.now());
+    const resp = await r.json();
+    if (resp.code === 0) return resp.data;
+    throw new Error(resp.error || resp.message || 'API返回错误');
+  } catch (e) {
+    throw new Error('请求失败: ' + e.message);
+  }
+}
+
+// ═══ 渲染卡片 ═══
+function renderSummary(data) {
+  const banner = document.getElementById('summary-banner');
+  banner.innerHTML = '';
+  const items = [
+    { num: data.ok_count, label: '✅ 正常', cls: 'ok' },
+    { num: data.warn_count, label: '⚠️ 警告', cls: 'warn' },
+    { num: data.error_count, label: '❌ 异常', cls: 'error' },
+    { num: data.not_run_count, label: '⏳ 未运行', cls: 'not_run' },
+  ];
+  items.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'summary-item';
+    el.innerHTML = `<div class="num ${item.cls}">${item.num}</div><div class="label">${item.label}</div>`;
+    banner.appendChild(el);
+  });
+  // 更新时间
+  const timeEl = document.createElement('div');
+  timeEl.className = 'summary-item';
+  timeEl.style.minWidth = '180px';
+  timeEl.innerHTML = `<div class="num" style="font-size:16px;color:var(--text-secondary)">${(data.server_time||'-')}</div><div class="label">🕐 服务器时间</div>`;
+  banner.appendChild(timeEl);
+}
+
+function renderCards(items) {
+  const grid = document.getElementById('card-grid');
+  grid.innerHTML = '';
+
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'monitor-card';
+
+    const statusBar = `<div class="status-bar ${item.status}"></div>`;
+
+    // 卡片头部
+    let statusPill = '';
+    if (item.id.startsWith('service_')) {
+      const dotCls = item.status === 'ok' ? 'ok' : 'error';
+      statusPill = `<span class="service-light"><span class="dot ${dotCls}"></span> <span class="status-pill ${item.status}">${item.status_label}</span></span>`;
+    } else {
+      statusPill = `<span class="status-pill ${item.status}">${item.status_label}</span>`;
+    }
+
+    let bodyHtml = '';
+
+    if (item.id === 'disk_usage') {
+      // 磁盘卡片特殊渲染
+      const di = item.disk_info || {};
+      const useVal = parseInt((di.use_pct || '0').replace('%', ''));
+      const fillCls = item.status;
+      bodyHtml = `
+        <div class="disk-bar">
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary);min-width:44px">${di.use_pct || '?'}</span>
+          <div class="disk-bar-track">
+            <div class="disk-bar-fill ${fillCls}" style="width:${useVal}%"></div>
+          </div>
+        </div>
+        <div class="disk-details">
+          <span>💾 已用: ${di.used || '?'}</span>
+          <span>📦 总量: ${di.size || '?'}</span>
+          <span>🆓 剩余: ${di.avail || '?'}</span>
+        </div>
+      `;
+    } else if (item.last_run) {
+      const h = item.hours_ago;
+      let timeDesc = '';
+      if (h < 1) timeDesc = '刚刚';
+      else if (h < 24) timeDesc = `${h}小时前`;
+      else timeDesc = `${Math.round(h/24)}天前`;
+      bodyHtml = `
+        <div class="row"><span class="label">⏰ 最后执行</span><span class="value" title="${item.last_run}">${item.last_run}</span></div>
+        <div class="row"><span class="label">⏱️ 距今</span><span class="value">${timeDesc}</span></div>
+        <div class="row"><span class="label">📄 日志</span><span class="value" style="font-size:12px;color:var(--text-muted);font-family:monospace">${item.log_file || '-'}</span></div>
+      `;
+    } else if (item.id.startsWith('service_')) {
+      bodyHtml = `
+        <div class="row"><span class="label">🔧 服务</span><span class="value" style="font-family:monospace">${item.service_name || ''}</span></div>
+        <div class="row"><span class="label">🌐 端口</span><span class="value">${item.id.replace('service_stock-manager-', '')}</span></div>
+        <div class="row"><span class="label">🔄 状态</span><span class="value">${item.status_label}</span></div>
+      `;
+    } else {
+      bodyHtml = `<div class="row"><span class="value" style="color:var(--text-muted)">暂无运行记录</span></div>`;
+    }
+
+    card.innerHTML = statusBar + `
+      <div class="card-header">
+        <div>
+          <div class="card-title">${item.name}</div>
+          <div class="card-subtitle">${item.description || ''}</div>
+        </div>
+        ${statusPill}
+      </div>
+      <div class="card-body">${bodyHtml}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ═══ 刷新逻辑 ═══
+async function refreshNow() {
+  const grid = document.getElementById('card-grid');
+  grid.innerHTML = '<div class="loading"><div class="spinner"></div>刷新中...</div>';
+  try {
+    const data = await fetchStatus();
+    const items = data.tasks || data.items || [];
+    data.ok_count = items.filter(x => x.status === 'ok').length;
+    data.warn_count = items.filter(x => x.status === 'warn').length;
+    data.error_count = items.filter(x => x.status === 'error').length;
+    data.not_run_count = items.filter(x => x.status === 'not_run').length;
+    data.server_time = new Date().toLocaleString('zh-CN');
+    data.items = items;
+    renderSummary(data);
+    renderCards(data.items);
+  } catch (e) {
+    grid.innerHTML = `<div class="error-state">❌ ${e.message}</div>`;
+  }
+}
+
+// ═══ 自动刷新 ═══
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(refreshNow, 30000);
+}
+
+// ═══ 初始化 ═══
+document.addEventListener('DOMContentLoaded', () => {
+  refreshNow();
+  startAutoRefresh();
+});
+</script>
+</body>
+</html>

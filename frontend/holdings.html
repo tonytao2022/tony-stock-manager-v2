@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>💼 持仓管理 · 股票智能分析 v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0a0e1a; color: #e0e0e0; }
+  .header { background: #111827; padding: 16px 24px; display: flex; align-items: center;
+            justify-content: space-between; border-bottom: 1px solid #1e293b; }
+  .header h1 { font-size: 1.3em; color: #fff; }
+  .header h1 span { color: #e94560; }
+  .header .nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: .85em; }
+  .header .nav a:hover { color: #e94560; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+  .card { background: #111827; border-radius: 10px; padding: 16px; border: 1px solid #1e293b; margin-bottom: 16px; }
+  .card h3 { font-size: .95em; color: #888; margin-bottom: 12px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85em; }
+  th, td { padding: 10px; border-bottom: 1px solid #1e293b; text-align: left; }
+  th { color: #888; font-weight: 600; position: sticky; top: 0; background: #111827; }
+  tr:hover td { background: #1a1f2e; }
+
+  .summary-box { text-align: center; padding: 16px; }
+  .summary-box .num { font-size: 1.8em; font-weight: 700; }
+  .summary-box .label { font-size: .82em; color: #888; margin-top: 4px; }
+  .positive { color: #6ee7b7; }
+  .negative { color: #fca5a5; }
+  input, select { background: #0a0e1a; border: 1px solid #1e293b; color: #e0e0e0;
+                  padding: 6px 10px; border-radius: 6px; }
+  .action-btn { background: #0f3460; color: #fff; border: none; padding: 6px 14px;
+                border-radius: 6px; cursor: pointer; font-size: .82em; }
+  .action-btn:hover { background: #1a4a80; }
+  .action-btn.success { background: #065f46; }
+  .action-btn.danger { background: #7f1d1d; }
+
+  .form-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row label { font-size: .82em; color: #888; min-width: 60px; }
+
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                   background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #111827; border-radius: 12px; padding: 24px; width: 400px; max-width: 90vw; border: 1px solid #1e293b; }
+  .modal h3 { margin-bottom: 16px; }
+  .modal .form-row { margin-bottom: 12px; }
+  .modal .form-row input { width: 100%; }
+
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .75em; }
+  .st-hold { background: #065f46; color: #6ee7b7; }
+  .st-locked { background: #78350f; color: #fbbf24; }
+  .st-closed { background: #1e293b; color: #64748b; }
+
+  .empty-state { text-align: center; padding: 40px; color: #888; }
+
+  @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>💼 持仓管理 <span>v2</span></h1>
+  <div class="nav">
+    <a href="/stock-v2/">📊 驾驶舱</a>
+    <a href="/stock-v2/holdings.html" style="color:#e94560">💼 持仓</a>
+    <a href="/stock-v2/strategy.html">📋 策略</a>
+  </div>
+</div>
+
+<div class="container">
+  <!-- 汇总 -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="summary-box">
+        <div class="num" id="totalStocks">0</div>
+        <div class="label">持仓数</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="summary-box">
+        <div class="num" id="totalValue">¥0</div>
+        <div class="label">总市值</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="summary-box">
+        <div class="num" id="totalProfit">¥0</div>
+        <div class="label">总盈亏</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作栏 -->
+  <div class="card">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="action-btn success" onclick="showAddModal()">＋ 新建仓</button>
+      <button class="action-btn" onclick="recalcHoldings()">🔄 刷新盈亏</button>
+      <span style="margin-left:auto;font-size:.82em;color:#888" id="updateTime"></span>
+    </div>
+  </div>
+
+  <!-- 持仓列表 -->
+  <div class="card">
+    <h3>持仓列表</h3>
+    <div style="max-height:500px;overflow-y:auto">
+      <table>
+        <thead><tr>
+          <th>代码</th><th>名称</th><th>持股</th><th>成本价</th><th>现价</th><th>市值</th><th>盈亏%</th><th>盈亏额</th><th>建仓日</th><th style=color:#fbbf24;font-size:.72em>短期评估</th><th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody id="holdingsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: 新建/编辑 -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">新建持仓</h3>
+    <div class="form-row"><label>代码:</label><input id="fCode" placeholder="如 300750.SZ"></div>
+    <div class="form-row"><label>名称:</label><input id="fName" placeholder="如 宁德时代"></div>
+    <div class="form-row"><label>股数:</label><input id="fShares" type="number" placeholder="数量"></div>
+    <div class="form-row"><label>成本价:</label><input id="fCost" type="number" step="0.001" placeholder="元"></div>
+    <div class="form-row"><label>建仓日:</label><input id="fDate" type="date"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="action-btn success" onclick="saveHolding()">✅ 保存</button>
+      <button class="action-btn" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '/stock-v2/api/v2';
+let API_KEY = '';
+
+async function init() {
+  // 优先从API获取JWT Token
+  try {
+    const resp = await fetch(API_BASE + '/auth/token', {method:'POST'});
+    const d = await resp.json();
+    if (d.data && d.data.token) {
+      API_KEY = 'token:' + d.data.token;
+      return;
+    }
+  } catch {}
+  // fallback: 从api-key.js读静态密钥
+  try {
+    const resp = await fetch('/stock-v2/api-key.js');
+    const text = await resp.text();
+    const m = text.match(/['"]([^'"]+)['"]/);
+    if (m) API_KEY = m[1];
+  } catch {}
+  if (!API_KEY) API_KEY = '90a275cbcc004fd5';
+}
+
+async function api(path, method='GET', body=null) {
+  const headers = {'Content-Type':'application/json'};
+  if (API_KEY.startsWith('token:')) {
+    headers['Authorization'] = 'Bearer ' + API_KEY.substring(6);
+  } else {
+    headers['X-API-Key'] = API_KEY;
+  }
+  const opt = { method, headers };
+  if (body) opt.body = JSON.stringify(body);
+  const resp = await fetch(API_BASE + path, opt);
+  return resp.json();
+}
+
+// ─── 加载持仓 ────────────────────────────────────────
+async function loadHoldings() {
+  // 先刷新盈亏计算
+  await api('/holdings/calc');
+
+  const d = await api('/holdings');
+  if (d.code !== 0) return;
+  const holdings = d.data.holdings || [];
+  
+  // 加载短期评估
+  let shortTermMap = {};
+  try {
+    const stResp = await api('/short-term/evaluate');
+    if (stResp.code === 0) {
+      (stResp.data.results || []).forEach(r => { if (r.ts_code) shortTermMap[r.ts_code] = r; });
+    }
+  } catch(e) {}
+
+  // 汇总
+  let totalStocks = 0, totalValue = 0, totalProfit = 0;
+  holdings.forEach(h => {
+    if (['hold','locked'].includes(h.status || '')) {
+      totalStocks++;
+      totalValue += h.market_value || 0;
+      totalProfit += h.profit_amount || 0;
+    }
+  });
+
+  document.getElementById('totalStocks').textContent = totalStocks;
+  document.getElementById('totalValue').textContent = '¥' + totalValue.toLocaleString('zh-CN', {minimumFractionDigits:2});
+  const tpEl = document.getElementById('totalProfit');
+  tpEl.textContent = (totalProfit >= 0 ? '＋' : '') + '¥' + totalProfit.toLocaleString('zh-CN', {minimumFractionDigits:2});
+  tpEl.style.color = totalProfit >= 0 ? '#6ee7b7' : '#fca5a5';
+  document.getElementById('updateTime').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+
+  // 列表
+  const body = document.getElementById('holdingsBody');
+  if (holdings.length === 0) {
+    body.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#888;padding:30px">暂无持仓，点击"新建仓"添加</td></tr>';
+    return;
+  }
+
+  body.innerHTML = holdings.map(h => {
+    const pp = h.profit_pct || 0;
+    const pa = h.profit_amount || 0;
+    const color = pp >= 0 ? '#6ee7b7' : '#fca5a5';
+    const st = (h.status || '').toLowerCase();
+    const stClass = st === 'hold' ? 'st-hold' : st === 'locked' ? 'st-locked' : 'st-closed';
+    // 短期评估
+    const stVal = shortTermMap[h.ts_code];
+    let stHtml = '<span style=color:#888;font-size:.72em>—</span>';
+    if (stVal) {
+      const sc = stVal.composite_score || 0;
+      const act = stVal.action || 'unknown';
+      const cl = sc >= 70 ? '#6ee7b7' : sc >= 50 ? '#fbbf24' : sc >= 35 ? '#f97316' : '#fca5a5';
+      const actLabel = act === 'hold' ? '持有' : act === 'reduce' ? '减仓' : act === 'exit' ? '止盈/损' : '--';
+      stHtml = `<span style="color:${cl};font-weight:600;font-size:.82em">${sc.toFixed(0)}分</span><span style="font-size:.7em;color:#888;margin-left:4px">${actLabel}</span>`;
+      if (stVal.reason) stHtml += `<div style="font-size:.65em;color:#888">${stVal.reason}</div>`;
+    }
+    return `<tr>
+      <td style="font-size:.82em;color:#888">${h.ts_code || ''}</td>
+      <td><strong>${h.name || ''}</strong></td>
+      <td>${h.shares || 0}</td>
+      <td>¥${(h.cost_price || 0).toFixed(2)}</td>
+      <td>¥${(h.current_price || 0).toFixed(2)}</td>
+      <td>¥${(h.market_value || 0).toFixed(2)}</td>
+      <td style="color:${color};font-weight:600">${pp >= 0 ? '+' : ''}${pp.toFixed(2)}%</td>
+      <td style="color:${color}">${pa >= 0 ? '+' : ''}¥${pa.toFixed(2)}</td>
+      <td style="font-size:.82em;color:#888">${h.buy_date || '--'}</td>
+      <td style="font-size:.78em">${stHtml}</td>
+      <td><span class="status-badge ${stClass}">${st === 'locked' ? '🔒锁定' : st === 'hold' ? '持有' : '已清仓'}</span></td>
+      <td>
+        <button class="action-btn" onclick="editHolding('${h.ts_code}')" style="font-size:.75em">✏️</button>
+        <button class="action-btn danger" onclick="deleteHolding('${h.ts_code}','${h.name}')" style="font-size:.75em">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── 刷新盈亏 ────────────────────────────────────────
+async function recalcHoldings() {
+  document.getElementById('updateTime').textContent = '⏳ 计算中...';
+  await loadHoldings();
+}
+
+// ─── 新建/编辑 ────────────────────────────────────────
+function showAddModal() {
+  document.getElementById('modalTitle').textContent = '新建持仓';
+  document.getElementById('fCode').value = '';
+  document.getElementById('fName').value = '';
+  document.getElementById('fShares').value = '';
+  document.getElementById('fCost').value = '';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+async function saveHolding() {
+  const code = document.getElementById('fCode').value.trim();
+  const name = document.getElementById('fName').value.trim();
+  const shares = parseInt(document.getElementById('fShares').value);
+  const cost = parseFloat(document.getElementById('fCost').value);
+  const date = document.getElementById('fDate').value;
+
+  if (!code || !name || !shares || !cost) {
+    alert('请填写完整信息');
+    return;
+  }
+
+  const d = await api('/holdings', 'POST', {ts_code: code, name, shares, cost_price: cost, buy_date: date});
+  if (d.code === 0) {
+    closeModal();
+    loadHoldings();
+  } else {
+    alert('保存失败: ' + d.message);
+  }
+}
+
+async function deleteHolding(code, name) {
+  if (!confirm(`确定清仓 ${name}(${code})？`)) return;
+  const d = await api(`/holdings/${code}`, 'DELETE');
+  if (d.code === 0) {
+    loadHoldings();
+  } else {
+    alert('删除失败: ' + d.message);
+  }
+}
+
+async function editHolding(code) {
+  const d = await api('/holdings');
+  if (d.code !== 0) return;
+  const h = (d.data.holdings || []).find(x => x.ts_code === code);
+  if (!h) return;
+
+  document.getElementById('modalTitle').textContent = `编辑 ${h.name}`;
+  document.getElementById('fCode').value = h.ts_code;
+  document.getElementById('fName').value = h.name;
+  document.getElementById('fShares').value = h.shares;
+  document.getElementById('fCost').value = h.cost_price;
+  document.getElementById('fDate').value = h.buy_date || '';
+  document.getElementById('modal').classList.add('active');
+}
+
+// ─── 启动 ─────────────────────────────────────────────
+(async () => {
+  await init();
+  await loadHoldings();
+})();
+</script>
+</body>
+</html>

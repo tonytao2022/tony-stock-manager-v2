@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回测报告 — 股票智能分析系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#c8d6e5;min-height:100vh}
+.container{max-width:1100px;margin:0 auto;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #1e2a3a;margin-bottom:20px}
+.header h1{font-size:22px;color:#fff}
+.header .info{font-size:13px;color:#6b7f9e}
+.card{background:linear-gradient(145deg,#141e30,#1a2744);border-radius:12px;padding:20px;margin-bottom:12px;border:1px solid #1e2a3a;cursor:pointer;transition:all .2s}
+.card:hover{border-color:#3498db}
+.card.open{border-color:#3498db}
+.card-title{font-size:14px;color:#8a9bb5;margin-bottom:12px;font-weight:600}
+.summary{display:flex;justify-content:space-between;align-items:center}
+.summary-left{flex:1}
+.summary-left .name{font-size:15px;font-weight:700;color:#fff}
+.summary-left .date{font-size:12px;color:#6b7f9e}
+.summary-right{text-align:right}
+.summary-right .return{font-size:20px;font-weight:700}
+.summary-meta{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:#8a9bb5}
+.detail{display:none;padding-top:16px;margin-top:16px;border-top:1px solid #1e2a3a}
+.detail.show{display:block}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.kpi-item{background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;text-align:center}
+.kpi-item .lb{font-size:11px;color:#6b7f9e}
+.kpi-item .val{font-size:18px;font-weight:700;margin-top:2px}
+.kpi-item .sub{font-size:11px;color:#6b7f9e;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 10px;color:#6b7f9e;border-bottom:1px solid #1e2a3a;font-weight:600}
+td{padding:8px 10px;border-bottom:1px solid rgba(30,42,58,0.5)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.loading{text-align:center;padding:60px}
+.spinner{width:32px;height:32px;border:3px solid #1e2a3a;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pagination{display:flex;justify-content:center;gap:6px;margin-top:12px}
+.pg-btn{width:28px;height:28px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#8a9bb5;cursor:pointer;font-size:12px}
+.pg-btn:hover{border-color:#3498db;color:#fff}
+.pg-btn.active{background:#3498db;border-color:#3498db;color:#fff}
+.toolbar{display:flex;gap:8px;margin-bottom:12px}
+.toolbar select,.toolbar input{padding:6px 10px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:13px}
+.toolbar input:focus,.toolbar select:focus{outline:none;border-color:#3498db}
+.empty{text-align:center;padding:40px;color:#6b7f9e;font-size:14px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header" style=display:flex;align-items:center>
+    <a href=/stock-v2/ style=color:var(--accent);text-decoration:none;font-size:.85em;margin-right:12px>← 返回驾驶舱</a>
+    <h1>📋 回测报告</h1>
+    <span class="info" id="totalInfo" style=margin-left:auto>加载中...</span>
+  </div>
+  <div id="app"><div class="loading"><div class="spinner"></div><div>加载...</div></div></div>
+</div>
+
+<script>
+const API = '/stock-v2/api/v2/backtest';
+var reports = [];
+var activeId = null;
+
+function pct(v, d){
+  v = Number(v||0);
+  return v > 0 ? '<span style=color:#2ecc71>+' + v.toFixed(2) + '%</span>' : (v < 0 ? '<span style=color:#e74c3c>' + v.toFixed(2) + '%</span>' : '<span>' + (d||'0.00%') + '</span>');
+}
+
+async function loadList(){
+  document.getElementById('app').innerHTML = '<div class="loading"><div class="spinner"></div><div>加载...</div></div>';
+  const r = await fetch(API + '/history').then(r=>r.json());
+  reports = r.data?.runs || [];
+  document.getElementById('totalInfo').textContent = '共 ' + reports.length + ' 条报告';
+  renderList();
+}
+
+function renderList(){
+  if(reports.length === 0){
+    document.getElementById('app').innerHTML = '<div class="empty">暂无回测报告</div>';
+    return;
+  }
+  var html = '';
+  for(var i=0;i<reports.length;i++){
+    var r = reports[i];
+    var tr = Number(r.total_return||0);
+    var md = Number(r.max_drawdown||0);
+    var wr = Number(r.win_rate||0);
+    var id = r.id;
+    var isOpen = (activeId === id);
+    html += '<div class="card' + (isOpen?' open':'') + '" onclick="toggle('+id+')">';
+    html += '<div class=summary><div class=summary-left>';
+    html += '<div class=name>' + (r.strategy_name||'回测') + '</div>';
+    html += '<div class=date>' + (r.report_date||'') + '</div>';
+    html += '<div class=summary-meta>';
+    html += '<span>交易: ' + (r.total_trades||0) + '笔</span>';
+    html += '<span>胜率: ' + wr.toFixed(2) + '%</span>';
+    html += '<span>盈亏比: ' + Number(r.profit_factor||0).toFixed(2) + '</span>';
+    html += '<span>持仓: ' + Number(r.avg_hold_days||0).toFixed(1) + '日</span>';
+    html += '</div></div>';
+    html += '<div class=summary-right>';
+    html += '<div class=return style=color:' + (tr>=0?'#2ecc71':'#e74c3c') + '>' + (tr>=0?'+':'') + tr.toFixed(2) + '%</div>';
+    html += '<div style=font-size:11px;color:#6b7f9e>回撤 ' + md.toFixed(2) + '%</div>';
+    html += '</div></div>';
+    html += '<div class="detail' + (isOpen?' show':'') + '" id="detail-'+id+'">';
+    if(isOpen) html += '<div class="loading"><div class="spinner"></div></div>';
+    html += '</div></div>';
+  }
+  document.getElementById('app').innerHTML = html;
+  if(activeId) loadDetail(activeId);
+}
+
+async function toggle(id){
+  if(activeId === id){ activeId = null; renderList(); return; }
+  activeId = id;
+  renderList();
+}
+
+async function loadDetail(id){
+  var el = document.getElementById('detail-'+id);
+  if(!el) return;
+  try{
+    const r = await fetch(API + '/report/' + id).then(r=>r.json());
+    if(r.code !== 0){ el.innerHTML = '<div class=empty>加载失败</div>'; return; }
+    var d = r.data;
+    var trades = d.trade_records || [];
+    
+    var reasonMap = {"score_decline":"评分下降","stop_loss":"止损","force_close":"强制平仓"};
+  var html = '<div class=kpi-grid>';
+    html += '<div class=kpi-item><div class=lb>总收益</div><div class=val style=color:'+(Number(d.total_return||0)>=0?'#2ecc71':'#e74c3c')+'>' + pct(d.total_return) + '</div></div>';
+    html += '<div class=kpi-item><div class=lb>最大回撤</div><div class=val style=color:#e74c3c>' + Number(d.max_drawdown||0).toFixed(2) + '%</div></div>';
+    html += '<div class=kpi-item><div class=lb>胜率</div><div class=val style=color:#3498db>' + Number(d.win_rate||0).toFixed(2) + '%</div><div class=sub>'+(d.win_trades||0)+'胜/'+(d.lose_trades||0)+'负</div></div>';
+    html += '<div class=kpi-item><div class=lb>盈亏比</div><div class=val style=color:#f39c12>' + Number(d.profit_factor||0).toFixed(2) + '</div></div>';
+    html += '<div class=kpi-item><div class=lb>平均盈利</div><div class=val style=color:#2ecc71>' + Number(d.avg_win_pct||0).toFixed(2) + '%</div></div>';
+    html += '<div class=kpi-item><div class=lb>平均亏损</div><div class=val style=color:#e74c3c>' + Number(d.avg_lose_pct||0).toFixed(2) + '%</div></div>';
+    html += '</div>';
+    
+    // 交易明细（固定显示最近100笔）
+    var pageSize = 50, curPage = 1;
+    var totalPages = Math.ceil(Math.min(trades.length, 200) / pageSize);
+    var filtered = trades.slice(0,200);
+    html += '<div><div style=display:flex;gap:8px;margin-bottom:8px>';
+    html += '<select id=detail-filter-'+id+' onchange="toggleDetailFilter('+id+')"><option value=all>全部</option><option value=win>盈利</option><option value=lose>亏损</option></select>';
+    html += '<input id=detail-keyword-'+id+' placeholder="搜索代码..." style=flex:1;padding:6px 10px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:12px oninput="toggleDetailFilter('+id+')">';
+    html += '<span style=font-size:12px;color:#6b7f9e;line-height:32px>' + filtered.length + '笔</span></div>';
+    html += '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><tr><th>#</th><th>代码</th><th>买入</th><th>卖出</th><th>持有</th><th>收益</th><th>原因</th></tr>';
+    for(var i=0;i<filtered.length;i++){
+      var t = filtered[i];
+      html += '<tr><td>'+(i+1)+'</td><td>'+ (t.ts_code||'') +'</td><td>'+ (t.buy_date||'') +'</td><td>'+ (t.sell_date||'') +'</td><td>'+ (t.hold_days||'') +'日</td>';
+      html += '<td>' + pct(t.profit_pct) + '</td><td style=color:#6b7f9e>' + ({"score_decline":"评分下降","stop_loss":"止损","force_close":"强制平仓"}[t.exit_reason]||t.exit_reason||'') + '</td></tr>';
+    }
+    html += '</table></div></div>';
+    
+    el.innerHTML = html;
+  }catch(e){
+    el.innerHTML = '<div class=empty>加载失败: ' + e.message + '</div>';
+  }
+}
+
+function toggleDetailFilter(id){
+  loadDetail(id);
+}
+
+loadList();
+</script>
+</body>
+</html>

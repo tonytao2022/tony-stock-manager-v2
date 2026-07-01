@@ -1,0 +1,60 @@
+{
+  "status": "ok",
+  "date": "2026-06-10",
+  "season": "chaos",
+  "season_label": "🌪️ 混沌(观望)",
+  "hengji": "weak_heng",
+  "raw_score": 1.2,
+  "confidence": 0.688,
+  "regime": "range",
+  "scoring_strategy": "momentum",
+  "params": {
+    "threshold": 50,
+    "max_pos_pct": 20,
+    "stop_loss": 12.0,
+    "trailing_stop": 18.0,
+    "cool_days": 15,
+    "max_hold": 30,
+    "p1": 40,
+    "p2": 30,
+    "p3": 20
+  },
+  "holdings": [],
+  "candidates": [
+    {
+      "ts_code": "301377.SZ",
+      "name": "鼎泰高科",
+      "score": 96.1,
+      "buy_point": "none",
+      "direction": "LONG"
+    },
+    {
+      "ts_code": "601869.SH",
+      "name": "长飞光纤",
+      "score": 95.5,
+      "buy_point": "none",
+      "direction": "LONG"
+    },
+    {
+      "ts_code": "000859.SZ",
+      "name": "国风新材",
+      "score": 93.5,
+      "buy_point": "none",
+      "direction": "LONG"
+    },
+    {
+      "ts_code": "000021.SZ",
+      "name": "深科技",
+      "score": 85.5,
+      "buy_point": "none",
+      "direction": "LONG"
+    },
+    {
+      "ts_code": "605060.SH",
+      "name": "联德股份",
+      "score": 83.3,
+      "buy_point": "none",
+      "direction": "LONG"
+    }
+  ]
+}

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔑 API Key管理 - 股票智能分析管理系统</title>
+<style>
+:root {
+  --bg-primary: #0a0e17; --bg-secondary: #111827; --bg-card: #161d2a; --bg-card-hover: #1c2538;
+  --bg-sidebar: #0d1321; --bg-input: #1a2235; --bg-tooltip: #1e293b;
+  --border-color: #1e2d4a; --border-light: #253a5e; --border-accent: #3b82f6;
+  --text-primary: #e2e8f0; --text-secondary: #94a3b8; --text-muted: #64748b; --text-bright: #ffffff;
+  --color-ok: #22c55e; --color-warn: #f59e0b; --color-error: #ef4444; --color-na: #6b7280;
+  --sidebar-width: 240px; --header-height: 56px; --radius: 8px; --radius-sm: 4px; --radius-lg: 12px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4); --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.5);
+  --transition: 0.2s ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Helvetica Neue',Arial,sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.5;overflow-y:auto;overflow-x:hidden;min-height:100vh}
+.app-layout{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar-width);min-width:var(--sidebar-width);background:var(--bg-sidebar);border-right:1px solid var(--border-color);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;overflow-y:auto}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border-color)}
+.sidebar-logo .title{font-size:15px;font-weight:700;color:var(--text-bright);letter-spacing:0.5px}
+.sidebar-logo .subtitle{font-size:11px;color:var(--text-muted);margin-top:4px}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text-secondary);font-size:14px;transition:all var(--transition);border-left:3px solid transparent;margin:2px 0;text-decoration:none}
+.nav-item:hover{background:var(--bg-card);color:var(--text-primary)}
+.nav-item.active{background:var(--bg-card);color:var(--text-bright);border-left-color:var(--border-accent);font-weight:600}
+.nav-item .nav-icon{font-size:18px;width:24px;text-align:center}
+.nav-section-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);padding:8px 20px 4px;font-weight:700}
+.sidebar-footer{padding:12px 20px;border-top:1px solid var(--border-color);font-size:11px;color:var(--text-muted)}
+.main-content{flex:1;margin-left:var(--sidebar-width);padding:0;min-height:100vh}
+.top-bar{position:sticky;top:0;z-index:50;background:var(--bg-secondary);border-bottom:1px solid var(--border-color);padding:0 24px;height:var(--header-height);display:flex;align-items:center;justify-content:space-between}
+.top-bar .breadcrumb{font-size:16px;font-weight:600;color:var(--text-bright)}
+.top-bar .update-info{display:flex;align-items:center;gap:16px;font-size:13px}
+.page-content{padding:20px 24px}
+
+/* ─── Cards ─── */
+.card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);padding:20px;transition:all var(--transition)}
+.card:hover{background:var(--bg-card-hover);border-color:var(--border-light);box-shadow:var(--shadow-card-hover)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:15px;font-weight:600;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+.card-subtitle{font-size:12px;color:var(--text-muted)}
+
+/* ─── Table ─── */
+.data-table{width:100%;border-collapse:collapse}
+.data-table thead th{background:var(--bg-secondary);color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;text-align:left;border-bottom:2px solid var(--border-color);white-space:nowrap}
+.data-table tbody td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--border-color);color:var(--text-secondary)}
+.data-table tbody tr:hover{background:var(--bg-card-hover)}
+.data-table tbody tr:hover td{color:var(--text-primary)}
+
+/* ─── Buttons ─── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);transition:all var(--transition)}
+.btn:hover{background:var(--bg-card-hover);border-color:var(--border-light)}
+.btn.primary{background:var(--border-accent);border-color:var(--border-accent);color:#fff}
+.btn.primary:hover{background:#2563eb}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.danger{background:transparent;border-color:var(--color-error);color:var(--color-error)}
+.btn.danger:hover{background:var(--color-error);color:#fff}
+
+/* ─── Badges / Status ─── */
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+.status-badge.active{background:rgba(34,197,94,0.15);color:var(--color-ok);border:1px solid rgba(34,197,94,0.3)}
+.status-badge.inactive{background:rgba(107,114,128,0.15);color:var(--color-na);border:1px solid rgba(107,114,128,0.3)}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.status-dot.active{background:var(--color-ok);box-shadow:0 0 6px rgba(34,197,94,0.5)}
+.status-dot.inactive{background:var(--color-na)}
+
+/* ─── Toggle Switch ─── */
+.toggle-switch{position:relative;display:inline-block;width:44px;height:24px;cursor:pointer}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg-input);border:1px solid var(--border-color);border-radius:12px;transition:all var(--transition)}
+.toggle-slider::before{content:"";position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--text-muted);border-radius:50%;transition:all var(--transition)}
+.toggle-switch input:checked + .toggle-slider{background:rgba(34,197,94,0.2);border-color:var(--color-ok)}
+.toggle-switch input:checked + .toggle-slider::before{background:var(--color-ok);transform:translateX(20px)}
+
+/* ─── Key display ─── */
+.key-value{font-family:'Fira Code','Cascadia Code','Menlo',monospace;font-size:13px;color:var(--text-secondary);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key-value.revealed{color:var(--text-primary)}
+.key-mask{color:var(--text-muted);font-family:monospace;letter-spacing:2px}
+
+/* ─── Modal ─── */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal-box{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);width:520px;max-width:90vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-color)}
+.modal-title{font-size:15px;font-weight:600;color:var(--text-bright)}
+.modal-close{font-size:20px;color:var(--text-muted);cursor:pointer;background:none;border:none;line-height:1}
+.modal-close:hover{color:var(--text-primary)}
+.modal-body{padding:20px}
+.modal-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-color)}
+.modal-body .form-group{margin-bottom:16px}
+.modal-body .form-group:last-child{margin-bottom:0}
+.form-label{display:block;font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+.form-input{width:100%;background:var(--bg-input);border:1px solid var(--border-color);border-radius:var(--radius);padding:10px 14px;color:var(--text-primary);font-size:14px;font-family:monospace;transition:all var(--transition)}
+.form-input:focus{outline:none;border-color:var(--border-accent);box-shadow:0 0 0 2px rgba(59,130,246,0.15)}
+.form-input.readonly{opacity:0.6;cursor:not-allowed}
+
+/* ─── Loading & Empty ─── */
+.loading{display:flex;align-items:center;justify-content:center;padding:60px 20px;color:var(--text-muted)}
+.spinner{width:24px;height:24px;border:3px solid var(--border-color);border-top-color:var(--border-accent);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted)}
+.empty-state .empty-icon{font-size:48px;margin-bottom:12px}
+
+/* ─── Toast ─── */
+.toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 20px;border-radius:var(--radius);font-size:13px;font-weight:500;border:1px solid;box-shadow:var(--shadow-card-hover);animation:slideIn 0.25s ease;max-width:380px}
+.toast.success{background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.3);color:var(--color-ok)}
+.toast.error{background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.3);color:var(--color-error)}
+.toast.info{background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.3);color:var(--border-accent)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* ─── Responsive ─── */
+@media(max-width:768px){
+  .sidebar{width:0;min-width:0;overflow:hidden}
+  .main-content{margin-left:0}
+  .data-table{font-size:12px}
+  .data-table thead th,.data-table tbody td{padding:8px 10px}
+  .key-value{max-width:160px}
+}
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="title">⚡ 智能分析系统</div>
+      <div class="subtitle">v1.0 · API Key管理</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">🔑 API管理</div>
+      <a class="nav-item active" href="/stock-v2/api-settings.html"><span class="nav-icon">🔑</span> API Key管理</a>
+      <div class="nav-divider"></div>
+      <div class="nav-section-title">📋 快捷导航</div>
+      <a class="nav-item" href="/stock-v2/"><span class="nav-icon">🏠</span> 返回首页</a>
+      <a class="nav-item" href="/stock-v2/cron-monitor.html"><span class="nav-icon">⏱️</span> 任务监控</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="status-dot active"></span>服务运行中
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="top-bar">
+      <div class="breadcrumb">🔑 API Key管理</div>
+      <div class="update-info">
+        <span id="updateTime" style="color:var(--text-muted);font-size:13px"></span>
+        <button class="btn sm primary" onclick="loadKeys()">🔄 刷新</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- 统计概览 -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
+        <div class="card" style="text-align:center;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">API Keys 总数</div>
+          <div id="statTotal" style="font-size:24px;font-weight:700;color:var(--text-bright)">-</div>
+        </div>
+        <div class="card" style="text-align:center;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">已启用</div>
+          <div id="statActive" style="font-size:24px;font-weight:700;color:var(--color-ok)">-</div>
+        </div>
+        <div class="card" style="text-align:center;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">已禁用</div>
+          <div id="statInactive" style="font-size:24px;font-weight:700;color:var(--color-na)">-</div>
+        </div>
+      </div>
+
+      <!-- 表格 -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <span class="card-title">🔑 API凭证列表</span>
+            <span class="card-subtitle" style="margin-left:8px">管理所有第三方API密钥</span>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="keysTable">
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>名称</th>
+                <th>供应商</th>
+                <th style="min-width:180px">API Key</th>
+                <th>状态</th>
+                <th>最后更新</th>
+                <th style="width:160px">操作</th>
+              </tr>
+            </thead>
+            <tbody id="keysBody">
+              <tr><td colspan="7"><div class="loading"><div class="spinner"></div>加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">✏️ 编辑 API Key</div>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">名称</label>
+        <input class="form-input readonly" id="editName" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">供应商</label>
+        <input class="form-input readonly" id="editProvider" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <textarea class="form-input" id="editApiKey" rows="3" placeholder="在此输入新的 API Key 值..." style="resize:vertical;font-family:monospace"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeEditModal()">取消</button>
+      <button class="btn primary" onclick="saveEdit()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const API = '/stock-v2/api/v2/system';
+
+// ── Toast ──
+function showToast(msg, type='info'){
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className='toast '+type;
+  t.textContent=msg;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300)},3500);
+}
+
+// ── API helpers ──
+async function apiGet(path){
+  try{
+    const r=await fetch(API+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)});
+    if(!r.ok){const e=await r.json();throw new Error(e.detail?.message||'HTTP '+r.status)}
+    return await r.json();
+  }catch(e){
+    console.warn('API GET:',path,e.message);
+    return {code:-1,data:null,message:e.message};
+  }
+}
+
+async function apiPost(path, body){
+  try{
+    const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
+    if(!r.ok){const e=await r.json();throw new Error(e.detail?.message||'HTTP '+r.status)}
+    return await r.json();
+  }catch(e){
+    console.warn('API POST:',path,e.message);
+    return {code:-1,message:e.message};
+  }
+}
+
+// ── Key visibility state ──
+// Track revealed keys: map of keyId -> plaintext api_key
+const revealedKeys = {};
+
+// ── Load keys ──
+async function loadKeys(){
+  const tbody=document.getElementById('keysBody');
+  tbody.innerHTML='<tr><td colspan="7"><div class="loading"><div class="spinner"></div>加载中...</div></td></tr>';
+  document.getElementById('updateTime').textContent=new Date().toLocaleString('zh-CN');
+
+  const resp=await apiGet('/api-keys');
+  if(!resp || resp.code!==0 || !resp.data){
+    tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">⚠️</div>加载失败</div></td></tr>';
+    return;
+  }
+
+  const keys=resp.data?.keys||resp.data||[];
+  if(!keys || keys.length===0){
+    tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🔑</div>暂无 API Key 记录</div></td></tr>';
+    document.getElementById('statTotal').textContent='0';
+    document.getElementById('statActive').textContent='0';
+    document.getElementById('statInactive').textContent='0';
+    return;
+  }
+
+  // Stats
+  const active=keys.filter(k=>k.is_active).length;
+  document.getElementById('statTotal').textContent=keys.length;
+  document.getElementById('statActive').textContent=active;
+  document.getElementById('statInactive').textContent=keys.length-active;
+
+  // Build table
+  let html='';
+  for(const k of keys){
+    const displayKey = revealedKeys[k.id] 
+      ? '<span class="key-value revealed">'+escHtml(revealedKeys[k.id])+'</span>'
+      : '<span class="key-mask">'+escHtml(k.api_key)+'</span>';
+
+    html += '<tr>'+
+      '<td style="color:var(--text-muted);font-size:12px">'+k.id+'</td>'+
+      '<td><span style="font-weight:600;color:var(--text-bright)">'+escHtml(k.name)+'</span></td>'+
+      '<td><span style="color:var(--border-accent)">'+escHtml(k.provider)+'</span></td>'+
+      '<td><div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="key-value" id="keyDisplay_'+k.id+'">'+displayKey+'</span>'+
+        '<button class="btn sm" onclick="toggleKeyVisibility('+k.id+')" id="keyToggleBtn_'+k.id+'" style="padding:3px 8px;font-size:11px">'+
+          (revealedKeys[k.id] ? '🙈 隐藏' : '👁️ 显示')+
+        '</button>'+
+      '</div></td>'+
+      '<td><span class="status-badge '+(k.is_active?'active':'inactive')+'"><span class="status-dot '+(k.is_active?'active':'inactive')+'"></span>'+(k.is_active?'已启用':'已禁用')+'</span></td>'+
+      '<td style="font-size:12px;color:var(--text-muted)">'+(k.updated_at?formatTime(k.updated_at):'-')+'</td>'+
+      '<td><div style="display:flex;gap:6px;align-items:center">'+
+        '<label class="toggle-switch"><input type="checkbox" '+(k.is_active?'checked':'')+' onchange="toggleKey('+k.id+',this.checked)"><span class="toggle-slider"></span></label>'+
+        '<button class="btn sm primary" onclick="openEditModal('+k.id+')" style="padding:4px 10px">✏️ 编辑</button>'+
+      '</div></td>'+
+    '</tr>';
+  }
+  tbody.innerHTML=html;
+}
+
+// ── Toggle visibility ──
+async function toggleKeyVisibility(keyId){
+  if(revealedKeys[keyId]){
+    // Hide
+    delete revealedKeys[keyId];
+  }else{
+    // Fetch plaintext
+    try{
+      const resp=await fetch('/stock-v2/api/v2/api-keys/'+keyId,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(10000)});
+      if(!resp.ok){showToast('获取 Key 明文失败: HTTP '+resp.status,'error');return}
+      const data=await resp.json();
+      if(data.code===0 && data.data){
+        revealedKeys[keyId]=data.data.api_key;
+      }else{
+        showToast('获取 Key 明文失败: '+(data.error||'未知错误'),'error');
+        return;
+      }
+    }catch(e){
+      showToast('获取 Key 明文失败: '+e.message,'error');
+      return;
+    }
+  }
+  loadKeys();
+}
+
+// ── Toggle active ──
+async function toggleKey(keyId,checked){
+  const resp=await apiPost('/api-keys/toggle',{id:keyId});
+  if(resp.code===0){
+    showToast('状态切换成功','success');
+    loadKeys();
+  }else{
+    showToast('操作失败: '+(resp.message||'未知错误'),'error');
+    loadKeys();
+  }
+}
+
+// ── Edit modal ──
+let editingId=null;
+
+async function openEditModal(keyId){
+  editingId=keyId;
+  try{
+    const resp=await fetch(API+'/api-keys/'+keyId,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(10000)});
+    if(!resp.ok){showToast('获取 Key 详情失败','error');return}
+    const data=await resp.json();
+    if(data.code===0 && data.data){
+      const k=data.data;
+      document.getElementById('editName').value=k.name;
+      document.getElementById('editProvider').value=k.provider;
+      document.getElementById('editApiKey').value='';
+      document.getElementById('editApiKey').placeholder='输入新的 API Key 值...';
+      document.getElementById('editModal').classList.add('active');
+    }else{
+      showToast('获取 Key 详情失败','error');
+    }
+  }catch(e){
+    showToast('获取 Key 详情失败: '+e.message,'error');
+  }
+}
+
+function closeEditModal(){
+  document.getElementById('editModal').classList.remove('active');
+  editingId=null;
+}
+
+async function saveEdit(){
+  const newKey=document.getElementById('editApiKey').value.trim();
+  if(!newKey){
+    showToast('请输入 API Key 值','error');
+    return;
+  }
+  if(editingId===null) return;
+  const resp=await apiPost('/api-keys/update',{id:editingId,api_key:newKey});
+  if(resp.code===0){
+    showToast('API Key 更新成功 ✅','success');
+    closeEditModal();
+    if(revealedKeys[editingId]) delete revealedKeys[editingId];
+    loadKeys();
+  }else{
+    showToast('保存失败: '+(resp.message||'未知错误'),'error');
+  }
+}
+
+// ── Utilities ──
+function escHtml(s){
+  const d=document.createElement('div');
+  d.textContent=s||'';
+  return d.innerHTML;
+}
+
+function formatTime(iso){
+  try{
+    const d=new Date(iso);
+    const month=String(d.getMonth()+1).padStart(2,'0');
+    const day=String(d.getDate()).padStart(2,'0');
+    const hh=String(d.getHours()).padStart(2,'0');
+    const mm=String(d.getMinutes()).padStart(2,'0');
+    return month+'-'+day+' '+hh+':'+mm;
+  }catch(e){return iso||'-'}
+}
+
+// ── Click outside modal to close ──
+document.getElementById('editModal').addEventListener('click',function(e){
+  if(e.target===this) closeEditModal();
+});
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded',loadKeys);
+</script>
+</body>
+</html>

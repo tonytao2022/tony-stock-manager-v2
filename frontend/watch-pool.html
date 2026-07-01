@@ -1,0 +1,123 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>🔍 监控池管理 - 股票智能分析 v2</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bg6:#1a2235;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--h:56px;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);overflow-y:auto}
+.top{background:var(--bg2);border-bottom:1px solid var(--bd);padding:0 24px;height:var(--h);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.top .l{display:flex;align-items:center;gap:12px}.top .l a{color:var(--accent);text-decoration:none;font-size:.85em}.top .r{font-size:.82em;color:var(--t3)}h1{font-size:1.1em;font-weight:600}
+.c{max-width:1400px;margin:0 auto;padding:20px}
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.bar input,.bar select{background:var(--bg6);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:6px;font-size:.82em;height:34px}
+.bar .q{flex:1;min-width:120px;max-width:200px}
+.bar .sm{margin-left:auto;font-size:.82em;color:var(--t3);white-space:nowrap}.b1{padding:6px 14px;border-radius:6px;border:none;color:#fff;cursor:pointer;font-size:.82em;background:var(--accent)}.b1:hover{opacity:.85}.b1:disabled{opacity:.5}.bg{background:#065f46}.br{background:#0f3460}.bd{background:#7f1d1d}
+.card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--bd);padding:16px;margin-bottom:16px}
+.card h3{font-size:.9em;color:var(--t2);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:.82em}
+th,td{padding:7px 8px;border-bottom:1px solid var(--bd);text-align:left}
+th{color:var(--t3);font-weight:600;position:sticky;top:0;background:var(--bg3);white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--t1)}th.srt{color:var(--accent)}tr:hover td{background:var(--bg4)}
+.sb{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-weight:600}
+.sb1{background:#047857;color:#a7f3d0}.sb2{background:#065f46;color:#6ee7b7}.sb3{background:#78350f;color:#fbbf24}.sb4{background:#1e293b;color:#94a3b8}.sb5{background:#7f1d1d;color:#fca5a5}
+.pg{display:flex;gap:4px;justify-content:center;align-items:center;margin-top:12px;flex-wrap:wrap}
+.pg button{padding:4px 10px;border-radius:4px;border:1px solid var(--bd);background:var(--bg6);color:var(--t2);cursor:pointer;font-size:.82em}
+.pg button:hover{background:var(--bg4)}.pg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pg .info{font-size:.78em;color:var(--t3);margin-left:8px}.loading{text-align:center;padding:40px;color:var(--t3)}.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.bx{text-align:center;padding:8px;background:var(--bg4);border-radius:6px}.bx .no{font-size:1.2em;font-weight:700;color:var(--accent)}.bx .lb{font-size:.72em;color:var(--t3);margin-top:2px}
+.modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:none;justify-content:center;align-items:center}
+.modal .box{background:var(--bg2);border-radius:var(--r);padding:24px;width:380px;max-width:90vw;border:1px solid var(--bd)}
+.modal .box input{width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:10px}
+@media(max-width:768px){.bar{gap:4px}.g4{grid-template-columns:1fr 1fr}}
+</style>
+</head><body>
+<div class=top><div class=l><a href=/stock-v2/>← 返回</a><h1>🔍 监控池管理</h1></div><div class=r id=topDate></div></div>
+<div class=c>
+<div class=card>
+<div class=bar>
+<input class=q id=q placeholder="🔍 代码或名称..." oninput=load(1)>
+<select id=sf onchange=load(1)><option value="">📋 全部信号</option><option value=STRONG_BUY>🟢 强买</option><option value=BUY>🔵 买入</option><option value=CAUTIOUS_BUY>🟡 谨慎</option><option value=HOLD>⚪ 持有</option><option value=SELL>🔴 卖出</option></select>
+<button class="b1 bg" onclick=showAdd()>＋ 添加</button>
+<button class="b1" onclick=showBatch()>📋 批量</button>
+<span class=sm id=sum></span>
+</div>
+<div class=g4 id=cards></div>
+<div style="max-height:600px;overflow-y:auto"><table><thead><tr>
+<th onclick=sort(1) class=srt id=h1>代码 ↑↓</th><th onclick=sort(2)>名称</th><th onclick=sort(3)>行业</th><th onclick=sort(4)>校准分</th><th style=font-size:.78em;color:var(--t3)>原始分</th><th>季节</th><th onclick=sort(6)>趋势30%</th><th onclick=sort(7) style=color:#34d399>位置15%</th><th onclick=sort(8)>动量25%</th><th onclick=sort(9) style=color:#f87171>大单15%</th><th onclick=sort(10) style=color:#38bdf8>融资10%</th><th onclick=sort(11)>结构10%</th><th>量比</th><th>信号</th><th>操作</th>
+</tr></thead><tbody id=tb></tbody></table></div>
+<div class=pg id=pg></div>
+</div></div>
+
+<div class=modal id=addModal><div class=box>
+<h3 style=margin-bottom:16px>添加监控股票</h3>
+<input id=ac placeholder="股票代码 如 300750.SZ"><input id=an placeholder="股票名称（可选）">
+<div style=display:flex;gap:8px><button class="b1 bg" onclick=addOne()>✅ 添加</button><button class="b1" style=background:#1e293b onclick=hideAdd()>取消</button></div></div></div>
+
+<div class=modal id=batchModal><div class=box>
+<h3 style=margin-bottom:16px>批量添加</h3>
+<input id=bc placeholder="多个代码用逗号分隔">
+<textarea id=bt style="width:100%;height:80px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;padding:8px;margin-bottom:10px;resize:none" placeholder="每行一个股票代码"></textarea>
+<div style=display:flex;gap:8px><button class="b1 bg" onclick=batchAdd()>✅ 批量添加</button><button class="b1" style=background:#1e293b onclick=hideBatch()>取消</button></div></div></div>
+
+<script>
+const AK="90a275cbcc004fd5";
+function apiFetch(u,o){if(!o)o={};if(!o.headers)o.headers={};o.headers["X-API-Key"]=AK;return fetch(u,o)}
+
+const A='/stock-v2/api/v2';let D=[],DT='',SI=1,SA='desc',PG=50;
+
+async function load(p){
+const q=document.getElementById('q').value.toLowerCase(),sf=document.getElementById('sf').value;
+let url=A+'/watch-pool/score-list?page='+(p||1)+'&page_size=200&keyword='+encodeURIComponent(q);
+const r=await apiFetch(url);const d=await r.json();const dd=d.data||{};D=dd.stocks||[];DT=dd.total||0;
+document.getElementById('topDate').textContent='共 '+DT+' 只 | V2引擎';
+
+// 信号过滤（前端）
+let arr=D;
+if(sf)arr=arr.filter(s=>s.signal_type===sf);
+
+// 汇总卡片（基于校准分）
+const sb=arr.filter(x=>(x.calibrated_score||0)>=75).length;
+const bu=arr.filter(x=>{var c=x.calibrated_score||0;return c>=60&&c<75}).length;
+const se=0;
+const gt=0;
+document.getElementById('cards').innerHTML=
+'<div class=bx><div class=no>'+DT+'</div><div class=lb>监控总数</div></div>'+
+'<div class=bx><div class=no style=color:#6ee7b7>'+sb+'</div><div class=lb>强买(≥75)</div></div>'+
+'<div class=bx><div class=no style=color:#0ea5e9>'+bu+'</div><div class=lb>买入(60-74)</div></div>'+
+'<div class=bx><div class=no style=color:var(--t3)>'+(DT-sb-bu)+'</div><div class=lb>&lt;60分</div></div>';
+
+// 排序（按校准分）
+const keys={1:'ts_code',2:'name',3:'industry',4:'calibrated_score',5:'composite_score',6:'trend_score',7:'pos_score',8:'momentum_score',9:'mf_score',10:'margin_score',11:'structure_score'};
+const k=keys[SI]||'ts_code';const asc=SA==='asc';
+arr.sort((a,b)=>{let va=a[k]||0,vb=b[k]||0;if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase()}return asc?va>vb?1:va<vb?-1:0:va<vb?1:va>vb?-1:0});
+
+const tp=Math.ceil(arr.length/PG);if(p>tp)p=tp||1;const st=(p-1)*PG,ed=st+PG,pd=arr.slice(st,ed);
+document.getElementById('sum').textContent='显示 '+(st+1)+'-'+Math.min(ed,arr.length)+' / 共'+arr.length+' 条';
+document.getElementById('tb').innerHTML=pd.map((s,i)=>{
+const sc=s.composite_score||0;const ca=s.calibrated_score||0;const tr=s.trend_score||0;const pp=s.pos_score||0;const mo=s.momentum_score||0;
+const st2=s.structure_score||0;const mfs=s.mf_score||0;const mgs=s.margin_score||0;const vr=s.vol_ratio||1.0;
+const snMap={summer:'☀️夏季',autumn:'🍂秋季',winter:'❄️冬季',spring:'🌱春季',chaos:'🌀混沌',chaos_spring:'🌤️弱春',chaos_autumn:'⛅弱秋'};
+const seaBadge=snMap[s.season]?'<span class=sb style=font-size:.65em;background:var(--bg4);color:var(--t2);padding:2px 6px>'+snMap[s.season]+'</span>':'—';
+const stc=ca>=75?'sb1':ca>=60?'sb2':ca>=40?'sb4':'sb5';const vrColor=vr<0.3?'#fca5a5':vr>3?'#fbbf24':'#6ee7b7';
+return '<tr><td style=color:var(--t3) title="'+(s.name||'')+'">'+s.ts_code+'</td><td style=font-weight:600>'+(s.name||'')+'</td><td style=font-size:.78em;color:var(--t3)>'+(s.industry||'')+'</td><td><b style=color:'+(ca>=75?'#6ee7b7':ca>=60?'#60a5fa':ca>=40?'#fbbf24':'#94a3b8')+'>'+ca.toFixed(1)+'</b></td><td style=font-size:.82em;color:var(--t3)>'+sc.toFixed(1)+'</td><td>'+seaBadge+'</td><td>'+tr.toFixed(0)+'</td><td style=color:#34d399>'+pp.toFixed(0)+'</td><td>'+mo.toFixed(0)+'</td><td style=color:'+(mfs>=60?'#f87171':'var(--t3)')+'>'+mfs.toFixed(0)+'</td><td style=color:'+(mgs>=60?'#38bdf8':'var(--t3)')+'>'+mgs.toFixed(0)+'</td><td>'+st2.toFixed(0)+'</td><td style=color:'+vrColor+'>'+vr.toFixed(2)+'</td><td><span class="sb '+stc+'">'+(ca>=75?'强买':ca>=60?'买入':ca>=40?'持有':'回避')+'</span></td><td><button class="b1 bd" style=padding:2px 8px;font-size:.72em onclick=remove("'+s.ts_code+'","'+s.name+'")>✕</button></td></tr>'}).join('')||'<tr><td colspan=15 style=text-align:center;color:var(--t3);padding:30px>暂无数据</td></tr>';
+
+let ph='';const ms=Math.min(tp,10);for(let i=1;i<=ms;i++)ph+='<button class="'+(i===p?'on':'')+'" onclick=load('+i+')>'+i+'</button>';
+if(tp>10)ph+='<span class=info>…'+tp+'页</span>';
+document.getElementById('pg').innerHTML=ph;}
+function sort(n){if(SI===n){SA=SA==='desc'?'asc':'desc'}else{SI=n;SA='desc'}
+for(let i=1;i<=12;i++){const e=document.getElementById('h'+i);if(e)e.className=''}const e2=document.getElementById('h'+n);if(e2)e2.className='srt';load(1)}
+
+function showAdd(){document.getElementById('addModal').style.display='flex'}
+function hideAdd(){document.getElementById('addModal').style.display='flex';document.getElementById('addModal').style.display='none'}
+function showBatch(){document.getElementById('batchModal').style.display='flex'}
+function hideBatch(){document.getElementById('batchModal').style.display='none'}
+async function addOne(){const c=document.getElementById('ac').value.trim(),n=document.getElementById('an').value.trim()
+if(!c){alert('请输入代码');return}const r=await apiFetch(A+'/watch-pool/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ts_code:c,name:n})})
+const d=await r.json();if(d.code===0){document.getElementById('ac').value='';document.getElementById('an').value='';hideAdd();load(1)}else alert(d.message)}
+async function batchAdd(){const t=document.getElementById('bt').value.trim();const c=document.getElementById('bc').value.trim()
+const codes=t||c;if(!codes){alert('请输入代码');return}
+const r=await apiFetch(A+'/watch-pool/batch-add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes})})
+const d=await r.json();if(d.code===0){hideBatch();load(1);alert('添加'+d.data?.added+'只')}else alert(d.message)}
+async function remove(code,name){if(!confirm('确定从监控池移除 '+name+'('+code+')？'))return
+const r=await apiFetch(A+'/watch-pool/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ts_code:code})})
+const d=await r.json();if(d.code===0)load(1);else alert(d.message)}
+load(1);
+</script></body></html>

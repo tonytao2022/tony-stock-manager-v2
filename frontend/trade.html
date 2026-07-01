@@ -1,0 +1,202 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>📋 交易记录管理 — 股票智能分析 v2</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);min-height:100vh}
+.top{background:var(--bg2);border-bottom:1px solid var(--bd);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.top .l{display:flex;align-items:center;gap:12px}.top .l a{color:var(--accent);text-decoration:none;font-size:.85em}.top .l h1{font-size:1.1em;font-weight:600}
+.top .r{font-size:.82em;color:var(--t3)}
+.c{max-width:1400px;margin:0 auto;padding:16px}
+.card{background:var(--bg3);border-radius:8px;border:1px solid var(--bd);padding:16px;margin-bottom:12px}
+.card h3{font-size:.9em;color:var(--t2);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+table{width:100%;border-collapse:collapse;font-size:.82em}
+th,td{padding:7px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{color:var(--t3);font-weight:600;position:sticky;top:0;background:var(--bg3)}
+tr:hover td{background:var(--bg4)}
+.b1{padding:6px 14px;border-radius:6px;border:none;color:#fff;cursor:pointer;font-size:.82em;background:var(--accent)}.b1:hover{opacity:.85}
+.bg{background:#065f46}.br{background:#0f3460}.bd{background:#7f1d1d}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.78em;font-weight:500}
+.tag-buy{background:#065f46;color:#6ee7b7}.tag-sell{background:#7f1d1d;color:#fca5a5}
+.inp{background:var(--bg6);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:6px;font-size:.85em;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}.inp-sm{width:100px}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:8px}
+.row>div{flex:1;min-width:100px}
+.row label{font-size:.75em;color:var(--t3);display:block;margin-bottom:3px}
+.sb{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-weight:600}
+.sb-up{background:#065f46;color:#6ee7b7}.sb-down{background:#7f1d1d;color:#fca5a5}
+.up{color:#6ee7b7}.down{color:#fca5a5}
+.msg{padding:10px 16px;border-radius:6px;font-size:.82em;margin-bottom:12px;display:none}
+.msg.ok{display:block;background:#065f4622;border:1px solid #065f46;color:#6ee7b7}
+.msg.err{display:block;background:#7f1d1d22;border:1px solid #7f1d1d;color:#fca5a5}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal.active{display:flex}
+.modal-box{background:var(--bg3);border:1px solid var(--bd);border-radius:12px;padding:20px;width:420px;max-width:90vw}
+.modal-box h3{font-size:.9em;color:var(--t2);margin-bottom:12px}
+.loading{text-align:center;padding:40px;color:var(--t3)}
+</style>
+</head><body>
+
+<div class=top>
+<div class=l><a href=/stock-v2/>← 返回</a><h1>📋 交易记录管理</h1></div>
+<div class=r id=topInfo></div>
+</div>
+
+<div class=c>
+<div id=msg></div>
+
+<!-- 持仓概览 -->
+<div class=g4 id=holdSummary></div>
+
+<!-- 新建交易 -->
+<div class=card>
+<h3>➕ 新建交易</h3>
+<div class=row>
+  <div><label>股票代码</label><input class=inp id=fCode placeholder="如 300750.SZ"></div>
+  <div><label>股票名称</label><input class=inp id=fName placeholder="自动填充"></div>
+  <div><label>交易日期</label><input class=inp id=fDate type=date></div>
+  <div><label>方向</label><select class=inp id=fDir><option value=BUY>买入</option><option value=SELL>卖出</option></select></div>
+  <div><label>成交价 (¥)</label><input class=inp id=fPrice type=number step=0.001 placeholder="例: 15.500"></div>
+  <div><label>股数</label><input class=inp id=fQty type=number step=1 placeholder="100"></div>
+  <div><label>手续费</label><input class=inp id=fComm type=number step=0.01 value=5></div>
+</div>
+<div style=display:flex;gap:8px;margin-top:8px>
+  <button class="b1 bg" onclick=saveTrade()>✅ 保存</button>
+  <input class=inp id=fNotes placeholder="备注(可选)" style=flex:1>
+</div>
+</div>
+
+<!-- 交易列表 -->
+<div class=card>
+<h3>📋 交易记录 <span class=cnt id=recCnt></span></h3>
+<div class=row style=margin-bottom:8px>
+  <div style=flex:0><input class=inp id=qCode placeholder="🔍 筛选代码..." style=width:140px oninput=loadRecords()></div>
+  <div style=flex:0><button class="b1 br" onclick=loadRecords()>🔄 刷新</button></div>
+</div>
+<div style=max-height:500px;overflow-y:auto><table><thead><tr>
+<th>日期</th><th>代码</th><th>名称</th><th>方向</th><th>股数</th><th>成交价</th><th>金额</th><th>手续费</th><th>备注</th><th>操作</th>
+</tr></thead><tbody id=tb></tbody></table></div>
+</div>
+</div>
+
+<script>
+const AK="90a275cbcc004fd5";
+const A='/stock-v2/api/v2';
+async function api(p,m,b){
+  const h={'Content-Type':'application/json','X-API-Key':AK};
+  const o={method:m||'GET',headers:h};
+  if(b)o.body=JSON.stringify(b);
+  const r=await fetch(A+p,o);return r.json();
+}
+
+function msg(text,type){
+  const el=document.getElementById('msg');
+  el.textContent=text;el.className='msg '+(type||'ok');
+  setTimeout(()=>el.className='msg',3000);
+}
+
+// 加载持仓
+async function loadHoldings(){
+  const d=await api('/holdings');
+  if(d.code!==0)return;
+  const hs=d.data.holdings||[];
+  let tv=0,tp=0,tc=hs.length;
+  hs.forEach(h=>{tv+=h.market_value||0;tp+=h.profit_amount||0});
+  document.getElementById('holdSummary').innerHTML=
+    '<div class=card style=text-align:center;padding:12px><div style=font-size:1.3em;font-weight:700>'+(tc)+'</div><div style=font-size:.72em;color:var(--t3)>持仓</div></div>'+
+    '<div class=card style=text-align:center;padding:12px><div style=font-size:1.3em;font-weight:700;color:#6ee7b7>¥'+(tv.toFixed(2))+'</div><div style=font-size:.72em;color:var(--t3)>市值</div></div>'+
+    '<div class=card style=text-align:center;padding:12px><div style=font-size:1.3em;font-weight:700;'+(tp>=0?'color:#6ee7b7':'color:#fca5a5')+'>¥'+(tp.toFixed(2))+'</div><div style=font-size:.72em;color:var(--t3)>总盈亏</div></div>'+
+    '<div class=card style=text-align:center;padding:12px;border:1px solid var(--bg4)><div style=font-size:.85em;color:var(--t2)>'+new Date().toLocaleString('zh-CN')+'</div><div style=font-size:.7em;color:var(--t3)>更新时间</div></div>';
+  
+  // 持仓详情列表
+  let hhtml='<div class=card><h3>💼 持仓明细</h3><table><thead><tr><th>代码</th><th>名称</th><th>持股</th><th>成本价</th><th>现价</th><th>市值</th><th>盈亏</th><th>操作</th></tr></thead><tbody>';
+  hs.forEach(h=>{
+    hhtml+='<tr><td style=font-size:.78em>'+h.ts_code+'</td><td><b>'+h.name+'</b></td><td>'+h.shares+'</td>'+
+      '<td>¥'+(h.cost_price||0).toFixed(3)+'</td><td>¥'+(h.current_price||0).toFixed(2)+'</td>'+
+      '<td>¥'+((h.market_value||0).toFixed(2))+'</td>'+
+      '<td style='+((h.profit_pct||0)>=0?'color:#6ee7b7':'color:#fca5a5')+'>'+((h.profit_pct||0)>=0?'+':'')+(h.profit_pct||0).toFixed(2)+'%</td>'+
+      '<td><button class="b1 bd" style=padding:2px 8px;font-size:.7em onclick=delHolding("'+h.ts_code+'","'+(h.name||'')+'")>🗑️</button></td></tr>';
+  });
+  hhtml+='</tbody></table></div>';
+  document.getElementById('holdSummary').innerHTML+=hhtml;
+}
+
+// 交易记录
+async function loadRecords(){
+  const code=document.getElementById('qCode').value.trim();
+  const url=code?'/trade/records?ts_code='+code:'/trade/records';
+  const d=await api(url);
+  if(d.code!==0){msg('加载失败','err');return}
+  const rows=d.data.records||[];
+  document.getElementById('recCnt').textContent='共'+rows.length+'条';
+  document.getElementById('tb').innerHTML=rows.map(r=>{
+    const tag=r.direction==='BUY'?'<span class="tag tag-buy">买入</span>':'<span class="tag tag-sell">卖出</span>';
+    return '<tr><td style=font-size:.78em>'+(r.trade_date||'').slice(0,10)+'</td><td style=font-size:.78em>'+r.ts_code+'</td><td><b>'+(r.name||'')+'</b></td>'+
+      '<td>'+tag+'</td><td>'+r.qty+'</td><td>¥'+(r.price||0).toFixed(3)+'</td><td>¥'+((r.amount||0).toFixed(2))+'</td>'+
+      '<td style=font-size:.78em>¥'+(r.commission||0).toFixed(2)+'</td>'+
+      '<td style=font-size:.78em;color:var(--t3)>'+(r.notes||'')+'</td>'+
+      '<td><button class="b1 bd" style=padding:2px 8px;font-size:.7em onclick=delRecord('+r.id+')>🗑️</button></td></tr>';
+  }).join('')||'<tr><td colspan=10 style=text-align:center;padding:30px;color:var(--t3)>暂无交易记录</td></tr>';
+}
+
+// 新增交易
+async function saveTrade(){
+  const code=document.getElementById('fCode').value.trim();
+  const name=document.getElementById('fName').value.trim();
+  const date=document.getElementById('fDate').value;
+  const dir=document.getElementById('fDir').value;
+  const price=parseFloat(document.getElementById('fPrice').value);
+  const qty=parseInt(document.getElementById('fQty').value);
+  const comm=parseFloat(document.getElementById('fComm').value)||0;
+  const notes=document.getElementById('fNotes').value.trim();
+  
+  if(!code||!qty||!price){msg('请填写代码、股数和成交价','err');return}
+  
+  const d=await api('/trade/records','POST',{
+    ts_code:code,name:name||'',trade_date:date||new Date().toISOString().slice(0,10),
+    direction:dir,qty,price,commission:comm,notes
+  });
+  if(d.code===0){
+    msg('✅ 交易记录已保存','ok');
+    document.getElementById('fCode').value='';document.getElementById('fName').value='';
+    document.getElementById('fPrice').value='';document.getElementById('fQty').value='';
+    document.getElementById('fNotes').value='';
+    loadRecords();loadHoldings();
+  }else{
+    msg('❌ '+(d.message||'保存失败'),'err');
+  }
+}
+
+// 删除交易
+async function delRecord(id){
+  if(!confirm('确定删除此记录？'))return;
+  const d=await api('/trade/records/'+id,'DELETE');
+  if(d.code===0){
+    msg('✅ 已删除','ok');
+    loadRecords();loadHoldings();
+  }else{
+    msg('❌ '+(d.message||'删除失败'),'err');
+  }
+}
+
+async function delHolding(code,name){
+  if(!confirm('确定删除 '+name+'('+code+')？此操作会同时删除该股票的所有交易记录。'))return;
+  const d=await api('/holdings/'+code,'DELETE');
+  if(d.code===0){
+    msg('✅ 已删除 '+name,'ok');
+    // 同步删除交易记录
+    const r=await api('/trade/records?ts_code='+code);
+    if(r.data && r.data.records){for(const rec of r.data.records){await api('/trade/records/'+rec.id,'DELETE')}}
+    loadHoldings();loadRecords();
+  }else{
+    msg('❌ '+(d.message||'删除失败'),'err');
+  }
+}
+
+// 初始化
+document.getElementById('fDate').value=new Date().toISOString().slice(0,10);
+loadHoldings();
+loadRecords();
+</script>
+</body></html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>🗄️ 数据库管理 - 股票智能分析 v2</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bg5:#0d1321;--bg6:#1a2235;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--h:56px;--r:8px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);overflow-y:auto}
+.top{background:var(--bg2);border-bottom:1px solid var(--bd);padding:0 24px;height:var(--h);display:flex;align-items:center;justify-content:space-between}
+.top .l{display:flex;align-items:center;gap:12px}.top .l a{color:var(--accent);text-decoration:none;font-size:.85em}
+.top .l a:hover{text-decoration:underline}
+.top .r{font-size:.82em;color:var(--t3)}
+h1{font-size:1.1em;font-weight:600}
+.c{max-width:1400px;margin:0 auto;padding:20px}
+.stats{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.stat{background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r);padding:12px 20px;text-align:center;min-width:100px}
+.stat .no{font-size:1.5em;font-weight:700;color:var(--accent)}
+.stat .lb{font-size:.78em;color:var(--t3);margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:.85em}
+th,td{padding:10px 12px;border-bottom:1px solid var(--bd);text-align:left}
+th{color:var(--t3);font-weight:600;position:sticky;top:0;background:var(--bg2)}
+tr:hover td{background:var(--bg4)}
+.card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--bd);padding:16px;margin-bottom:16px}
+.card h3{font-size:.9em;color:var(--t2);margin-bottom:12px}
+.loading{text-align:center;padding:60px;color:var(--t3)}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.search{border:1px solid var(--bd);background:var(--bg6);color:var(--t1);padding:8px 12px;border-radius:6px;width:200px;outline:none;margin-bottom:12px}
+.search:focus{border-color:var(--accent)}
+.tn{font-weight:600;cursor:pointer;color:var(--accent)}
+.tn:hover{text-decoration:underline}
+@media(max-width:768px){.stats{gap:8px}.stat{min-width:80px;padding:8px 12px}.stat .no{font-size:1.1em}}
+</style>
+</head><body>
+<div class=top>
+<div class=l><a href=/stock-v2/>← 返回驾驶舱</a><h1>🗄️ 数据库管理</h1></div>
+<div class=r id=update></div>
+</div>
+<div class=c>
+<div class=stats id=stats><div class=stat><div class="no" id=tableCnt>--</div><div class=lb>表</div></div><div class=stat><div class="no" id=colCnt>--</div><div class=lb>字段</div></div><div class=stat><div class="no" id=idxCnt>--</div><div class=lb>索引</div></div><div class=stat style=cursor:pointer;border-color:var(--accent) onclick=doBackup()><div class="no" id=backupStatus style=font-size:1em>💾 备份</div><div class=lb id=backupInfo>点击备份数据库</div></div></div>
+<div class=card><input class=search id=q placeholder="搜索表名..." oninput=filter()>
+<div style="max-height:600px;overflow-y:auto"><table><thead><tr><th>表名</th><th>行数</th><th>引擎</th><th>字段</th><th>主键</th><th>说明</th></tr></thead><tbody id=tb></tbody></table></div></div>
+</div>
+<div id=detail style=display:none></div>
+<script>
+const A='/stock-v2/api/v2/system/db-tables';let D=null;
+async function load(){const r=await fetch(A);const d=await r.json();const dd=d.data||{};
+let tables=dd.tables,cols=dd.columns||{},idxs=dd.indexes||{};
+if(!tables||typeof tables==='object'&&!Array.isArray(tables)){tables=Object.values(tables||{})}
+D={tables,cols,idxs};
+document.getElementById('tableCnt').textContent=tables.length;
+let tc=0,ic=0;Object.values(cols||{}).forEach(c=>tc+=c.length||0);Object.values(idxs||{}).forEach(i=>ic+=Object.keys(i||{}).length);
+document.getElementById('colCnt').textContent=tc;document.getElementById('idxCnt').textContent=ic;
+document.getElementById('update').textContent='更新于 '+new Date().toLocaleString('zh-CN');
+filter();}
+function filter(){const q=document.getElementById('q').value.toLowerCase();if(!D)return;
+const t=D.tables.filter(t=>(t.name||t.TABLE_NAME||'').toLowerCase().includes(q));
+document.getElementById('tb').innerHTML=t.map(t=>{const n=t.name||t.TABLE_NAME||'',r=t.rows||t.TABLE_ROWS||0,e=t.engine||t.ENGINE||'',c=t.comment||t.TABLE_COMMENT||'';
+const cs=D.cols[n]||[];const pk=cs.filter(c=>c.key==='PRI'||c.COLUMN_KEY==='PRI').map(c=>c.name||c.COLUMN_NAME).join(', ');
+return '<tr><td class=tn onclick=showTable("'+n+'")>'+n+'</td><td>'+(r||0).toLocaleString()+'</td><td style=font-size:.82em;color:var(--t3)>'+e+'</td><td>'+(cs.length||0)+'</td><td style=font-size:.82em;color:var(--t3)>'+(pk||'-')+'</td><td style=font-size:.82em;color:var(--t3)>'+c+'</td></tr>'}).join('')||'<tr><td colspan=6 style=text-align:center;color:var(--t3);padding:20px>无匹配</td></tr>';}
+function showTable(n){if(!D)return;const cs=D.cols[n]||[];
+const det=document.getElementById('detail');det.style.display='block';
+det.innerHTML='<div class=card><h3>📋 '+n+' <span style=font-weight:400;font-size:.78em;color:var(--t3)>字段详情</span><span style=margin-left:auto;cursor:pointer;font-size:.85em onclick=hideDetail()>✕ 关闭</span></h3><div style=max-height:400px;overflow-y:auto><table><thead><tr><th>字段</th><th>类型</th><th>可空</th><th>主键</th><th>默认</th><th>说明</th></tr></thead><tbody>'+
+(cs.map(c=>'<tr><td><b>'+(c.name||c.COLUMN_NAME)+'</b></td><td style=font-size:.82em>'+(c.type||c.COLUMN_TYPE)+'</td><td>'+(c.nullable||c.IS_NULLABLE==='YES'?'✅':'❌')+'</td><td>'+(c.key==='PRI'||c.COLUMN_KEY==='PRI'?'🔑':'')+'</td><td style=font-size:.82em;color:var(--t3)>'+(c.default||c.COLUMN_DEFAULT||'-')+'</td><td style=font-size:.82em;color:var(--t3)>'+(c.comment||c.COLUMN_COMMENT||'')+'</td></tr>').join('')||'<tr><td colspan=6 style=text-align:center;color:var(--t3)>无字段</td></tr>')+'</tbody></table></div></div>';}
+function hideDetail(){document.getElementById('detail').style.display='none'}
+async function doBackup(){
+  const btn=document.getElementById('backupStatus');
+  const info=document.getElementById('backupInfo');
+  btn.textContent='⏳ 备份中...';
+  info.textContent='请稍候，约需1-2分钟';
+  try{
+    const r=await fetch('/stock-v2/api/v2/system/backup',{method:'POST'});
+    const d=await r.json();
+    if(d.code===0){
+      btn.textContent='✅ 完成';
+      info.textContent=d.data.size_mb+'MB | '+d.data.time;
+    }else{
+      btn.textContent='❌ 失败';
+      info.textContent=d.message||'备份失败';
+    }
+  }catch(e){
+    btn.textContent='❌ 失败';
+    info.textContent='网络错误';
+  }
+}
+load();
+</script></body></html>

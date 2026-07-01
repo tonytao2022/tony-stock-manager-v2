@@ -1,0 +1,179 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>📋 今日操作建议 v2 — 股票智能分析</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);padding:0;overflow-y:auto}
+.header{background:var(--bg2);border-bottom:1px solid var(--bd);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.header h1{font-size:1.1em;font-weight:600}.badge{font-size:.78em;color:var(--t3);background:var(--bg4);padding:4px 10px;border-radius:12px}
+.container{max-width:800px;margin:0 auto;padding:16px}
+.card{background:var(--bg3);border-radius:8px;border:1px solid var(--bd);padding:16px;margin-bottom:12px}
+.card-title{font-size:.85em;color:var(--t2);margin-bottom:10px;font-weight:600;letter-spacing:.5px}
+.season-row{display:flex;gap:12px}
+.season-item{flex:1;text-align:center;padding:10px;background:var(--bg4);border-radius:6px}
+.season-item .label{font-size:.72em;color:var(--t3)}
+.season-item .value{font-size:1em;font-weight:700;margin:4px 0}
+.season-item .sub{font-size:.7em;color:var(--t3)}
+.param-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.param-item{background:var(--bg4);padding:10px;border-radius:6px;text-align:center}
+.param-item .label{font-size:.72em;color:var(--t3)}
+.param-item .value{font-size:1.2em;font-weight:700;margin:3px 0}
+.param-item .sub{font-size:.65em;color:var(--t3)}
+.hold-card{background:var(--bg4);border-radius:6px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;border-left:3px solid var(--bd)}
+.advice-sell{border-left-color:#ef4444}.advice-watch{border-left-color:#f59e0b}.advice-profit{border-left-color:#10b981}
+.hold-code{font-weight:700;font-size:.85em}.hold-name{font-size:.78em;color:var(--t2);margin-left:6px}
+.hold-meta{font-size:.72em;color:var(--t3);margin-top:2px}
+.hold-reason{font-size:.72em;color:var(--t2);margin-top:4px;font-style:italic}
+.hold-right{text-align:right;min-width:100px}
+.hold-profit{font-size:1.1em;font-weight:700}.hold-profit.pos{color:#10b981}.hold-profit.neg{color:#ef4444}
+.hold-advice{margin:4px 0}.hold-score{font-size:.72em;color:var(--t3)}
+.cand-table{width:100%;font-size:.82em;border-collapse:collapse}
+.cand-table th,.cand-table td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--bd)}
+.cand-table th{color:var(--t3);font-weight:600}.score-col{color:#10b981;font-weight:700}
+.empty-state{text-align:center;padding:24px;color:var(--t3);font-size:.85em}
+.footer{text-align:center;padding:16px;font-size:.72em;color:var(--t3);line-height:1.8}
+.advice-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-weight:600}
+.advice-tag.buy{background:#04785722;color:#6ee7b7;border:1px solid #047857}
+.advice-tag.sell{background:#7f1d1d22;color:#fca5a5;border:1px solid #7f1d1d}
+.advice-tag.hold{background:#1e293b22;color:#94a3b8;border:1px solid #1e293b}
+.advice-tag.watch{background:#78350f22;color:#fbbf24;border:1px solid #78350f}
+.advice-tag.profit{background:#04785722;color:#6ee7b7;border:1px solid #047857}
+@media(max-width:600px){.season-row{flex-direction:column}.param-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head><body>
+<div class=header><div style=display:flex;align-items:center;gap:12px><a href=/stock-v2/ style=color:var(--accent);text-decoration:none;font-size:.85em>← 返回</a><h1>📋 今日操作建议</h1></div><span class=badge id=dateBadge></span></div>
+<div class=container id=app><div class=card style=text-align:center;padding:32px><div class=spinner style="display:inline-block;width:20px;height:20px;border:2px solid var(--bd);border-top:2px solid var(--accent);border-radius:50%;animation:s .8s linear infinite"></div><div style=color:var(--t3);margin-top:8px;font-size:.85em>加载操作建议...</div></div></div>
+<style>@keyframes s{to{transform:rotate(360deg)}}</style>
+<script>
+const AK="90a275cbcc004fd5";
+function apiFetch(u,o){if(!o)o={};if(!o.headers)o.headers={};o.headers["X-API-Key"]=AK;return fetch(u,o)}
+
+const A='/stock-v2';
+
+// 季节映射
+const SNMAP={summer:'☀️夏季',autumn:'🍂秋季',winter:'❄️冬季',spring:'🌱春季',chaos:'🌀混沌',chaos_spring:'🌤️弱春',chaos_autumn:'⛅弱秋'};
+const SEASON_PARAMS={summer:{line:72,hold:60,stop:12,tstop:18,maxpos:8,posPct:20},
+  autumn:{line:75,hold:25,stop:8,tstop:12,maxpos:6,posPct:15},
+  spring:{line:70,hold:20,stop:8,tstop:12,maxpos:6,posPct:15},
+  winter:{line:85,hold:10,stop:5,tstop:8,maxpos:2,posPct:10},
+  chaos:{line:75,hold:25,stop:10,tstop:12,maxpos:6,posPct:12},
+  chaos_spring:{line:70,hold:20,stop:8,tstop:12,maxpos:6,posPct:12},
+  chaos_autumn:{line:75,hold:25,stop:8,tstop:12,maxpos:4,posPct:10}};
+
+function tag(text,type){const cls={'BUY':'buy','SELL':'sell','HOLD':'hold','WAIT':'watch','强买':'buy','买入':'buy','持有':'hold','回避':'sell'}||'watch';return '<span class="advice-tag '+(cls[text]||'watch')+'">'+text+'</span>'}
+function fmtP(pct){return pct>0?'+'+pct.toFixed(1):pct.toFixed(1)}
+function fmtD(d){if(!d)return'--';const dt=new Date(d);return(dt.getMonth()+1)+'月'+dt.getDate()+'日'}
+
+async function load(){
+document.getElementById('dateBadge').textContent='更新于 '+new Date().toLocaleString('zh-CN',{hour12:false});
+try{
+// 1. 市场状态
+const[mr,sc,hl]=await Promise.all([
+apiFetch(A+'/api/v2/market-status').then(r=>r.json()),
+apiFetch(A+'/api/v2/watch-pool/score-list?page=1&page_size=310').then(r=>r.json()),
+apiFetch(A+'/api/v2/holdings').then(r=>r.json()).catch(()=>({}))
+]);
+const mk=mr.data||{};const season=mk.season||'chaos';const p=SEASON_PARAMS[season]||SEASON_PARAMS.chaos;
+const stocks=sc.data?.stocks||[];const holdings=hl.data?.holdings||[];
+
+// 买入候选（按板块季节区分阈值，全部展示）
+const seaLine={'summer':72,'chaos_spring':70,'chaos':75,'chaos_autumn':75,'spring':70,'autumn':75,'winter':85};
+const candidates=stocks.filter(s=>{
+  const sl=seaLine[s.season]||75;return (s.calibrated_score||0)>=sl;
+}).sort((a,b)=>(b.calibrated_score||0)-(a.calibrated_score||0));
+
+// 渲染
+const today=new Date();const wd=['周日','周一','周二','周三','周四','周五','周六'][today.getDay()];
+let html=`
+<div class=card>
+  <div class=card-title>📊 市场状态</div>
+  <div class=season-row>
+    <div class=season-item><div class=label>季节</div><div class=value>${SNMAP[season]||season}</div><div class=sub>${mk.hengji||'weak_heng'} | ${mk.regime||'range'}</div></div>
+    <div class=season-item><div class=label>总评分</div><div class=value>${mk.avg_score||0}分</div><div class=sub>校准均分${mk.avg_calibrated||0}</div></div>
+    <div class=season-item><div class=label>合格标的</div><div class=value style=color:#10b981>${mk.above75||0}只</div><div class=sub>共${mk.total_stocks||0}只 | ≥75:${mk.above75||0}只</div></div>
+  </div>
+</div>
+
+<div class=card>
+  <div class=card-title>⚙️ 今日策略参数 (${SNMAP[season]||season})</div>
+  <div class=param-grid>
+    <div class=param-item><div class=label>买入门槛</div><div class=value>≥${p.line}</div><div class=sub>评分/分</div></div>
+    <div class=param-item><div class=label>单只上限</div><div class=value>${p.posPct}%</div><div class=sub>仓位</div></div>
+    <div class=param-item><div class=label>止损线</div><div class=value style=color:#ef4444>-${p.stop}%</div><div class=sub>T1止损</div></div>
+    <div class=param-item><div class=label>最大持仓</div><div class=value>${p.maxpos}只</div><div class=sub>同时</div></div>
+    <div class=param-item><div class=label>移动止盈</div><div class=value style=color:#10b981>${p.tstop}%</div><div class=sub>回撤</div></div>
+    <div class=param-item><div class=label>最久持有</div><div class=value>${p.hold}日</div><div class=sub>P4检查</div></div>
+  </div>
+</div>
+
+<div class=card>
+  <div class=card-title>📂 持仓操作建议 (${holdings.length}只)</div>`;
+
+if(holdings.length===0){
+  html+=`<div class=empty-state>当前无持仓</div>`;
+}else{
+  for(const h of holdings){
+    const pp=h.profit_pct||0;const sc=h.score||0;
+    let adv='—',advCls='';
+    if(sc>=75){adv='🟢持有';advCls='advice-watch'}
+    else if(pp<=-12){adv='🔴卖出';advCls='advice-sell'}
+    else if(pp>0){adv='🟢持有';advCls='advice-watch'}
+    else{adv='⚪持有';advCls='advice-watch'}
+    html+=`
+    <div class="hold-card ${advCls}">
+      <div class=hold-left>
+        <span class=hold-code>${h.ts_code||'--'}</span><span class=hold-name>${h.name||''}</span>
+        <div class=hold-meta>${h.shares||0}股 | 成本¥${(h.cost_price||0).toFixed(2)} | 现价¥${(h.current_price||0).toFixed(2)}</div>
+        <div class=hold-meta>${fmtD(h.buy_date)}买入 | 评分${sc}</div>
+      </div>
+      <div class=hold-right>
+        <div class="hold-profit ${pp>5?'pos':pp<-5?'neg':''}">${pp>0?'+':''}${pp.toFixed(1)}%</div>
+        <div class=hold-advice>${tag(adv)}</div>
+        <div class=hold-score>市值¥${(h.market_value||0).toFixed(0)}</div>
+      </div>
+    </div>`;}
+  let mv=0,cost=0;for(const h of holdings){mv+=h.market_value||0;cost+=(h.cost_price||0)*(h.shares||0)}
+  const tp=cost>0?((mv-cost)/cost*100).toFixed(1):0;
+  html+=`<div style=margin-top:10px;text-align:right;font-size:.78em;color:var(--t3);border-top:1px solid var(--bd);padding-top:8px>总市值¥${mv.toFixed(0)} | 盈亏<span style=font-weight:700;color:${tp>0?'#10b981':'#ef4444'}>${tp>0?'+':''}${tp}%</span></div>`;
+}
+
+html+=`</div>
+
+<div class=card>
+  <div class=card-title>🎯 今日买入候选 (按板块季节 · 共${candidates.length}只)</div>`;
+
+if(candidates.length===0){
+  html+=`<div class=empty-state>今日无达标的买入候选</div>`;
+}else{
+  const groups={};const seaOrder=['summer','chaos_spring','spring','chaos','chaos_autumn','autumn','winter'];
+  const seaNames={'summer':'☀️ 科创板夏季','chaos_spring':'🌤️ 创业板弱春','spring':'🌱 春季','chaos':'🌀 主板混沌','chaos_autumn':'⛅ 深证弱秋','autumn':'🍂 秋季','winter':'❄️ 冬季'};
+  for(const c of candidates){const sea=c.season||'chaos';if(!groups[sea])groups[sea]=[];groups[sea].push(c);}
+  for(const sea of seaOrder){
+    if(!groups[sea])continue;const items=groups[sea];items.sort((a,b)=>(b.calibrated_score||0)-(a.calibrated_score||0));
+    html+='<div style=margin-top:12px><h4 style=font-size:.82em;color:var(--t2);margin-bottom:6px>'+seaNames[sea]+' <span style=color:var(--t3);font-weight:400>('+items.length+'只)</span></h4>';
+    html+='<table class=cand-table><tr><th>#</th><th>代码</th><th>名称</th><th>行业</th><th>校准分</th><th>趋势</th><th style=color:#34d399>位置</th><th>动量</th><th style=color:#f87171>大单</th><th style=color:#38bdf8>融资</th><th>量比</th></tr>';
+    for(let i=0;i<items.length;i++){
+      const c=items[i];const vr=c.vol_ratio||1.0;
+      html+='<tr><td>'+(i+1)+'</td><td>'+c.ts_code+'</td><td>'+(c.name||'')+'</td><td style=font-size:.72em;color:var(--t3)>'+(c.industry||'')+'</td><td class=score-col>'+(c.calibrated_score||0).toFixed(0)+'</td>'+
+        '<td>'+(c.trend_score||0).toFixed(0)+'</td><td style=color:#34d399>'+(c.pos_score||0).toFixed(0)+'</td>'+
+        '<td>'+(c.momentum_score||0).toFixed(0)+'</td><td style=color:#f87171>'+(c.mf_score||0).toFixed(0)+'</td>'+
+        '<td style=color:#38bdf8>'+(c.margin_score||0).toFixed(0)+'</td>'+
+        '<td style=font-size:.72em;color:'+(vr<0.3?'#fca5a5':vr>3?'#fbbf24':'#6ee7b7')+'>'+vr.toFixed(2)+'</td></tr>';}
+    html+='</table></div>';
+  }
+}
+
+html+=`</div>
+
+<div class=footer>
+  ⚠️ 以上建议基于V2新引擎+板块季节动态参数自动生成，仅供参考，不构成投资建议。<br>
+  评分引擎: May&Main最终方案(趋势30%+位置15%+结构10%+动量25%+大单15%+融资10%)<br>
+  更新时间: 每日15:30（收盘后自动计算）
+</div>`;
+
+document.getElementById('app').innerHTML=html;
+}catch(e){
+document.getElementById('app').innerHTML='<div class=card><div class=empty-state style=color:#ef4444>❌ 加载失败: '+e.message+'</div></div>';
+}}
+load();
+</script>
+</body></html>

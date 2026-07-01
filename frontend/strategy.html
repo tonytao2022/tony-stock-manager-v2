@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📋 策略管理 · 股票智能分析 v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0a0e1a; color: #e0e0e0; }
+  .header { background: #111827; padding: 16px 24px; display: flex; align-items: center;
+            justify-content: space-between; border-bottom: 1px solid #1e293b; }
+  .header h1 { font-size: 1.3em; color: #fff; }
+  .header h1 span { color: #e94560; }
+  .header .nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: .85em; }
+  .header .nav a:hover { color: #e94560; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: #111827; border-radius: 10px; padding: 16px; border: 1px solid #1e293b; margin-bottom: 16px; }
+  .card h3 { font-size: .95em; color: #888; margin-bottom: 12px; }
+
+  /* 信号表格 */
+  table { width: 100%; border-collapse: collapse; font-size: .85em; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #1e293b; text-align: left; }
+  th { color: #888; font-weight: 600; position: sticky; top: 0; background: #111827; }
+  tr:hover td { background: #1a1f2e; }
+
+  .signal-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .75em; font-weight: 600; }
+  .sg-buy { background: #065f46; color: #6ee7b7; }
+  .sg-strong-buy { background: #047857; color: #a7f3d0; }
+  .sg-cautious { background: #78350f; color: #fbbf24; }
+  .sg-hold { background: #1e293b; color: #94a3b8; }
+  .sg-sell { background: #7f1d1d; color: #fca5a5; }
+
+  .score-bar { display: inline-block; height: 6px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+  .positive { color: #6ee7b7; }
+  .negative { color: #fca5a5; }
+
+  /* 配置表单 */
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .config-item { background: #1a1f2e; border-radius: 6px; padding: 10px; }
+  .config-item .label { font-size: .78em; color: #888; }
+  .config-item .value { font-size: 1.1em; font-weight: 600; margin-top: 2px; }
+  .config-item input { background: #0a0e1a; border: 1px solid #1e293b; color: #e0e0e0;
+                       padding: 4px 8px; border-radius: 4px; width: 80px; font-size: 1em; }
+
+  /* 检查点 */
+  .checkpoint { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #1e293b; }
+  .checkpoint:last-child { border: none; }
+  .cp-name { flex: 1; font-weight: 600; }
+  .cp-status { padding: 3px 10px; border-radius: 4px; font-size: .8em; font-weight: 600; }
+  .cp-hold { background: #065f46; color: #6ee7b7; }
+  .cp-watch { background: #78350f; color: #fbbf24; }
+  .cp-sell { background: #7f1d1d; color: #fca5a5; }
+
+  .action-btn { background: #0f3460; color: #fff; border: none; padding: 6px 14px;
+                border-radius: 6px; cursor: pointer; font-size: .82em; }
+  .action-btn:hover { background: #1a4a80; }
+  .action-btn.danger { background: #7f1d1d; }
+  .action-btn.danger:hover { background: #991b1b; }
+  .action-btn.success { background: #065f46; }
+
+  .tabs { display: flex; gap: 2px; margin-bottom: 16px; }
+  .tab { padding: 8px 20px; background: #1a1f2e; border-radius: 6px 6px 0 0; cursor: pointer;
+         font-size: .85em; color: #888; border: none; }
+  .tab.active { background: #111827; color: #e94560; border-bottom: 2px solid #e94560; }
+
+  .loading { text-align: center; padding: 60px; color: #888; }
+  .loading .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid #1e293b;
+                       border-top-color: #e94560; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } .config-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 策略管理 <span>v2</span></h1>
+  <div class="nav">
+    <a href="/stock-v2/">📊 驾驶舱</a>
+    <a href="/stock-v2/holdings.html">💼 持仓</a>
+    <a href="/stock-v2/strategy.html" style="color:#e94560">📋 策略</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('signals')">📊 信号列表</button>
+    <button class="tab" onclick="switchTab('checkpoints')">🔍 检查点</button>
+    <button class="tab" onclick="switchTab('config')">⚙️ 配置</button>
+  </div>
+
+  <!-- Tab 内容 -->
+  <div id="tab-signals">
+    <div class="card">
+      <h3>📊 策略信号 <span style="float:right;font-weight:400;font-size:.82em" id="signalDate"></span></h3>
+      <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <input id="filterScore" placeholder="最低评分" style="background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:6px 10px;border-radius:6px;width:100px">
+        <select id="filterSignal" style="background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:6px 10px;border-radius:6px">
+          <option value="">全部信号</option>
+          <option value="STRONG_BUY">强买</option>
+          <option value="BUY">买入</option>
+          <option value="CAUTIOUS_BUY">谨慎</option>
+          <option value="HOLD">持有</option>
+          <option value="SELL">卖出</option>
+        </select>
+        <input id="searchCode" placeholder="搜索代码" style="background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:6px 10px;border-radius:6px;width:120px">
+        <button class="action-btn" onclick="loadSignals()">🔍 查询</button>
+        <span style="margin-left:auto;color:#888;font-size:.82em" id="signalCount"></span>
+      </div>
+      <div style="max-height:500px;overflow-y:auto">
+        <table>
+          <thead><tr>
+            <th>#</th><th>代码</th><th>名称</th><th>综合评分</th><th>信号</th><th>趋势</th><th>动量</th><th>结构</th><th>情绪</th><th>季节</th><th>仓位</th>
+          </tr></thead>
+          <tbody id="signalTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-checkpoints" style="display:none">
+    <div class="card">
+      <h3>🔍 持仓检查点状态</h3>
+      <div id="checkpointList"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>📈 阶梯策略规则</h3>
+        <table>
+          <tr><th>检查点</th><th>天数</th><th>操作</th><th>条件</th></tr>
+          <tr><td>P1</td><td id="p1Day">5</td><td>持有观察</td><td>盈利或亏损&lt;5%</td></tr>
+          <tr><td>P2</td><td id="p2Day">15</td><td>评估持有</td><td>盈利继续/亏损考虑</td></tr>
+          <tr><td>P3</td><td id="p3Day">25</td><td>部分止盈</td><td>浮盈&gt;10%建议减仓</td></tr>
+          <tr><td>P4</td><td id="p4Day">30</td><td>强制平仓</td><td>到期止盈/止损</td></tr>
+          <tr><td>止损</td><td>随时</td><td>止损卖出</td><td id="stopLossCell">亏损&gt;10%</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>⚙️ 阈值速览</h3>
+        <div id="configQuickView"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-config" style="display:none">
+    <div class="card">
+      <h3>⚙️ 策略参数配置</h3>
+      <div class="config-grid" id="configGrid"></div>
+      <div style="margin-top:16px">
+        <button class="action-btn success" onclick="saveConfig()">💾 保存全部</button>
+        <button class="action-btn" onclick="loadConfig()" style="margin-left:8px">🔄 恢复</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const AK="90a275cbcc004fd5";
+function apiFetch(u,o){if(!o)o={};if(!o.headers)o.headers={};o.headers["X-API-Key"]=AK;return fetch(u,o)}
+
+const API_BASE = '/stock-v2/api/v2';
+let API_KEY = '';
+
+async function init() {
+  try {
+    const resp = await fetch(API_BASE + '/auth/token', {method:'POST'});
+    const d = await resp.json();
+    if (d.data && d.data.token) {
+      API_KEY = 'token:' + d.data.token;
+      return;
+    }
+  } catch {}
+  try {
+    const resp = await fetch('/stock-v2/api-key.js');
+    const text = await resp.text();
+    const m = text.match(/['"]([^'"]+)['"]/);
+    if (m) API_KEY = m[1];
+  } catch {}
+  if (!API_KEY) API_KEY = '90a275cbcc004fd5';
+}
+
+async function api(path, method='GET', body=null) {
+  const headers = {'Content-Type':'application/json'};
+  if (API_KEY.startsWith('token:')) {
+    headers['Authorization'] = 'Bearer ' + API_KEY.substring(6);
+  } else {
+    headers['X-API-Key'] = API_KEY;
+  }
+  const opt = { method, headers };
+  if (body) opt.body = JSON.stringify(body);
+  const resp = await fetch(API_BASE + path, opt);
+  return resp.json();
+}
+
+// ─── 信号列表 ────────────────────────────────────────
+async function loadSignals() {
+  let params = '';
+  const minScore = document.getElementById('filterScore').value;
+  const signalType = document.getElementById('filterSignal').value;
+  const searchCode = document.getElementById('searchCode').value;
+  if (minScore) params += `&min_score=${minScore}`;
+  if (signalType) params += `&signal_type=${signalType}`;
+  if (searchCode) params += `&ts_code=${searchCode}`;
+
+  const d = await api('/strategy/signals' + (params ? '?' + params.substring(1) : ''));
+  if (d.code !== 0) return;
+  const data = d.data;
+  document.getElementById('signalDate').textContent = `📅 ${data.trade_date || ''}`;
+
+  const signals = data.signals || [];
+  document.getElementById('signalCount').textContent = `共 ${signals.length} 条`;
+
+  const tbody = document.getElementById('signalTable');
+  tbody.innerHTML = signals.map((s, i) => {
+    const score = s.calibrated_score || 0;
+    const barColor = score >= 80 ? '#059669' : score >= 75 ? '#0ea5e9' : score >= 40 ? '#f59e0b' : score >= 20 ? '#64748b' : '#dc2626';
+    const st = (s.signal_type || '').toLowerCase();
+    const badgeClass = st.includes('strong') ? 'sg-strong-buy' : st === 'buy' ? 'sg-buy' : st.includes('cautious') ? 'sg-cautious' : st === 'hold' ? 'sg-hold' : 'sg-sell';
+    return `<tr>
+      <td style="color:#888">${i+1}</td>
+      <td style="color:#888;font-size:.82em">${s.ts_code || ''}</td>
+      <td><strong>${s.name || ''}</strong></td>
+      <td><span class="score-bar" style="width:${(score/100)*60}px;background:${barColor}"></span>${score.toFixed(1)}</td>
+      <td><span class="signal-badge ${badgeClass}">${s.signal_label || s.signal_type || '--'}</span></td>
+      <td>${(s.trend_score || 0).toFixed(1)}</td>
+      <td>${(s.momentum_score || 0).toFixed(1)}</td>
+      <td>${(s.structure_score || 0).toFixed(1)}</td>
+      <td>${(s.emotion_score || 0).toFixed(1)}</td>
+      <td style="font-size:.82em">${(s.season || '--').substring(0,6)}</td>
+      <td>${(s.position_pct || 0).toFixed(0)}%</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" style="text-align:center;color:#888">暂无信号数据</td></tr>';
+}
+
+// ─── 检查点 ──────────────────────────────────────────
+async function loadCheckpoints() {
+  const d = await api('/strategy/checkpoints');
+  if (d.code !== 0) return;
+  const points = d.data.checkpoints || [];
+  const list = document.getElementById('checkpointList');
+
+  if (points.length === 0) {
+    list.innerHTML = '<div style="color:#888;padding:20px;text-align:center">暂无持仓，请先建仓</div>';
+    return;
+  }
+
+  list.innerHTML = points.map(p => {
+    const action = (p.action || '').toLowerCase();
+    const cpClass = action.includes('sell') || action.includes('close') ? 'cp-sell' :
+                    action.includes('watch') ? 'cp-watch' : 'cp-hold';
+    const color = p.profit_pct >= 0 ? '#6ee7b7' : '#fca5a5';
+    return `<div class="checkpoint">
+      <div class="cp-name">${p.name} <span style="color:#888;font-size:.82em">${p.ts_code}</span></div>
+      <div style="margin:0 16px;font-size:.82em;color:#888">持有${p.hold_days}日 · ${p.check_point || ''}</div>
+      <div style="margin-right:16px;font-weight:600;color:${color}">${p.profit_pct >= 0 ? '+' : ''}${(p.profit_pct || 0).toFixed(1)}%</div>
+      <div class="cp-status ${cpClass}" style="margin-right:8px">${p.action_label || p.action || '--'}</div>
+      <div style="font-size:.78em;color:#888;max-width:200px">${p.reason || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── 配置 ─────────────────────────────────────────────
+const CONFIG_KEYS = [
+  {key: 'strong_buy_threshold', label: '强买阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'buy_threshold', label: '买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'cautious_buy_threshold', label: '谨慎买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'hold_threshold', label: '持有阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'buy_min_score', label: '最低买入分', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'trailing_stop_pct', label: '移动止盈回撤%', type: 'number', step: 0.5, min: 0, max: 50},
+  {key: 'stop_loss_pct', label: '止损%', type: 'number', step: 0.5, min: -50, max: 0},
+  {key: 'max_hold_days', label: '最长持有日', type: 'number', step: 1, min: 1, max: 90},
+  {key: 'cool_days', label: '冷却日', type: 'number', step: 1, min: 0, max: 60},
+  {key: 'p1_check_day', label: 'P1检查日', type: 'number', step: 1, min: 1, max: 30},
+  {key: 'p2_check_day', label: 'P2检查日', type: 'number', step: 1, min: 1, max: 30},
+  {key: 'p3_check_day', label: 'P3检查日', type: 'number', step: 1, min: 1, max: 30},
+  {key: 'p4_close_day', label: 'P4平仓日', type: 'number', step: 1, min: 1, max: 60},
+  {key: 'position_max_pct', label: '单票最大仓位%', type: 'number', step: 5, min: 0, max: 100},
+  {key: 'summer_buy_threshold', label: '夏季买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'autumn_buy_threshold', label: '秋季买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'winter_buy_threshold', label: '冬季买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'spring_buy_threshold', label: '春季买入阈值', type: 'number', step: 1, min: 0, max: 100},
+  {key: 'chaos_buy_threshold', label: '混沌买入阈值', type: 'number', step: 1, min: 0, max: 100},
+];
+
+let configData = {};
+
+async function loadConfig() {
+  const d = await api('/strategy/config');
+  if (d.code !== 0) return;
+  configData = d.data.config || {};
+
+  const grid = document.getElementById('configGrid');
+  grid.innerHTML = CONFIG_KEYS.map(c => {
+    const val = configData[c.key]?.value || '';
+    // 阈值速览
+    if (['p1_check_day','p2_check_day','p3_check_day','p4_close_day','stop_loss_pct'].includes(c.key)) {
+      const elId = c.key + 'Val';
+      setTimeout(() => {
+        const el = document.getElementById(elId);
+        if (el) {
+          const map = {p1_check_day:'p1Day', p2_check_day:'p2Day', p3_check_day:'p3Day', p4_close_day:'p4Day', stop_loss_pct:'stopLossCell'};
+          const target = document.getElementById(map[c.key]);
+          if (target) target.textContent = c.key === 'stop_loss_pct' ? `亏损>${Math.abs(parseFloat(val))}%` : `${val}日`;
+        }
+      }, 100);
+    }
+    return `<div class="config-item">
+      <div class="label">${c.label}</div>
+      <input type="${c.type}" step="${c.step}" min="${c.min}" max="${c.max}"
+             value="${val}" id="cfg_${c.key}" data-key="${c.key}">
+    </div>`;
+  }).join('');
+}
+
+async function saveConfig() {
+  const inputs = document.querySelectorAll('#configGrid input');
+  let ok = 0, fail = 0;
+
+  for (const input of inputs) {
+    const key = input.dataset.key;
+    const val = input.value;
+    if (!key) continue;
+    try {
+      const d = await api('/strategy/config', 'PUT', {config_key: key, config_value: val});
+      if (d.code === 0) ok++; else fail++;
+    } catch { fail++; }
+  }
+
+  alert(`保存完成：${ok}个成功${fail ? ', '+fail+'个失败' : ''}`);
+  if (ok > 0) loadConfig();
+}
+
+// ─── Tab切换 ──────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.getElementById('tab-' + name).style.display = 'block';
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+
+  if (name === 'signals') loadSignals();
+  if (name === 'checkpoints') loadCheckpoints();
+  if (name === 'config') loadConfig();
+}
+
+// ─── 启动 ─────────────────────────────────────────────
+(async () => {
+  await init();
+  loadSignals();
+  loadCheckpoints();
+  loadConfig();
+})();
+</script>
+</body>
+</html>

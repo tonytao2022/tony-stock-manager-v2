@@ -1,0 +1,187 @@
+<!DOCTYPE html><html lang=zh-CN><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1.0"><title>📈 股票智能分析系统 v2</title>
+<style>
+:root{--bg1:#0a0e17;--bg2:#111827;--bg3:#161d2a;--bg4:#1c2538;--bg5:#0d1321;--bg6:#1a2235;--bd:#1e293b;--accent:#e94560;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--t4:#f1f5f9;--bull:#dc2626;--bear:#10b981;--sw:240px;--h:56px;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg1);color:var(--t1);line-height:1.6;overflow:hidden;height:100vh}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg1)}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+.login-page{display:flex;justify-content:center;align-items:center;height:100vh;background:linear-gradient(135deg,#0a0e17,#1a1a4e 50%,#0d1321);position:relative;overflow:hidden}
+.login-page::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(233,69,96,.03) 0%,transparent 60%);animation:pulse 8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.login-box{position:relative;z-index:1;width:380px;max-width:90vw;background:var(--bg2);border-radius:var(--r);border:1px solid var(--bd);padding:40px 32px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login-box .logo{text-align:center;margin-bottom:32px}
+.login-box .logo h1{font-size:1.4em;letter-spacing:1px}
+.login-box .logo h1 span{color:var(--accent)}
+.login-box .logo p{font-size:.82em;color:var(--t3);margin-top:4px}
+.login-box .fg{margin-bottom:16px}
+.login-box label{display:block;font-size:.82em;color:var(--t2);margin-bottom:4px}
+.login-box input{width:100%;padding:10px 14px;border-radius:6px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);font-size:.9em;outline:none}
+.login-box input:focus{border-color:var(--accent)}
+.login-btn{width:100%;padding:10px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:.95em;font-weight:600;cursor:pointer;margin-top:8px}
+.login-btn:hover{opacity:.85}
+.login-btn:disabled{opacity:.5;cursor:not-allowed}
+.login-error{color:var(--bull);font-size:.82em;margin-top:8px;text-align:center}
+.login-hint{font-size:.75em;color:var(--t3);margin-top:16px;text-align:center}
+.app-layout{display:flex;height:100vh}
+.sidebar{width:var(--sw);min-width:var(--sw);background:var(--bg5);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow-y:auto}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--bd)}
+.sidebar-logo .title{font-size:15px;font-weight:700;color:var(--t4)}
+.sidebar-logo .subtitle{font-size:11px;color:var(--t3);margin-top:4px}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--t2);font-size:14px;border-left:3px solid transparent}
+.nav-item:hover{background:var(--bg3);color:var(--t1)}
+.nav-item.active{background:var(--bg3);color:var(--t4);border-left-color:var(--accent)}
+.nav-item .ic{font-size:18px;width:24px;text-align:center}
+.nav-div{height:1px;background:var(--bd);margin:8px 16px}
+.nav-sec{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);padding:8px 20px 4px;font-weight:700}
+.sidebar-footer{padding:12px 20px;border-top:1px solid var(--bd);font-size:11px;color:var(--t3)}
+.sidebar-footer .ur{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sidebar-footer .ua{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700}
+.sidebar-footer .lo{font-size:10px;color:var(--t3);cursor:pointer;text-decoration:underline}
+.sidebar-footer .lo:hover{color:var(--accent)}
+.sidebar-footer .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--bear)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.top{height:var(--h);min-height:var(--h);background:var(--bg2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top .pt{font-size:15px;font-weight:600}
+.top .pt .em{margin-right:8px}
+.top .ri{display:flex;align-items:center;gap:16px;font-size:.82em;color:var(--t2)}
+.ca{flex:1;overflow-y:auto;padding:20px}
+.card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--bd);padding:16px;margin-bottom:16px}
+.card h3{font-size:.9em;color:var(--t2);margin-bottom:12px}
+.card h3 .cnt{float:right;color:var(--accent);font-weight:700}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.ri{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)}
+.ri:last-child{border:none}
+.rn{width:24px;height:24px;border-radius:50%;background:var(--bg6);text-align:center;line-height:24px;font-size:.78em;color:var(--t3);margin-right:10px}
+.ra{flex:1}
+.ra .n{font-weight:600}
+.ra .ind{font-size:.78em;color:var(--t3)}
+.rs{font-size:1.15em;font-weight:700}
+.sb{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-weight:600;margin-left:8px}
+.sb1{background:#047857;color:#a7f3d0}
+.sb2{background:#065f46;color:#6ee7b7}
+.sb3{background:#78350f;color:#fbbf24}
+.sb4{background:#1e293b;color:#94a3b8}
+.db{display:flex;height:24px;border-radius:6px;overflow:hidden;margin:8px 0}
+.ds{display:flex;align-items:center;justify-content:center;font-size:.72em;color:#fff;font-weight:600}
+.mc{background:linear-gradient(135deg,#1a1a4e,#0f3460);border-radius:var(--r);padding:20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.ms{font-size:1.3em}
+.ms .em{margin-right:8px}
+.mst{display:flex;gap:24px;flex-wrap:wrap}
+.msi{text-align:center}
+.msi .no{font-size:1.2em;font-weight:700;color:var(--accent)}
+.msi .ti{font-size:.78em;color:var(--t3);margin-top:2px}
+.po{color:var(--bull)}
+.ne{color:var(--bear)}
+table{width:100%;border-collapse:collapse;font-size:.82em}
+td,th{padding:8px 10px;border-bottom:1px solid var(--bd);text-align:left}
+th{color:var(--t3);font-weight:600;position:sticky;top:0;background:var(--bg3)}
+tr:hover td{background:var(--bg4)}
+.ps{display:flex;gap:20px;margin-bottom:12px;flex-wrap:wrap}
+.ps .it{text-align:center}
+.ps .it .no{font-size:1.4em;font-weight:700}
+.ps .it .lb{font-size:.78em;color:var(--t3)}
+input,select{background:var(--bg6);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:6px}
+@media(max-width:768px){.g2,.g3,.g4{grid-template-columns:1fr}}
+</style>
+</head><body>
+<div class=login-page id=lp>
+<div class=login-box>
+<div class=logo><h1>📈 股票智能分析 <span>v2</span></h1><p>Stock Intelligent Analysis System</p></div>
+<div class=fg><label>用户名</label><input id=lu placeholder=tony value=tony></div>
+<div class=fg><label>密码</label><input id=lpw type=password></div>
+<button class=login-btn id=lb onclick=doLogin()>登 录</button>
+<div class=login-error id=le></div>
+<div class=login-hint>默认: tony / tony123</div>
+</div></div>
+<div class=app-layout id=al style=display:none>
+<aside class=sidebar>
+<div class=sidebar-logo><div class=title>📈 智能分析 <span style=color:var(--accent)>v2</span></div><div class=subtitle>Stock Analysis System</div></div>
+<nav class=sidebar-nav>
+<div class=nav-sec>核心功能</div>
+<div class="nav-item active" onclick=sp("dashboard",this)><span class=ic>📊</span> 数据驾驶舱</div>
+<div class=nav-item onclick=sp("strategy",this)><span class=ic>📋</span> 策略信号</div>
+<div class=nav-item onclick=sp("holdings",this)><span class=ic>💼</span> 持仓管理</div>
+<div class=nav-item onclick=sp("sector",this)><span class=ic>🌀</span> 板块轮动</div>
+<div class=nav-div></div>
+<div class=nav-sec>系统</div>
+<div class=nav-item onclick=sp("config",this)><span class=ic>⚙️</span> 系统设置</div>
+</nav>
+<div class=sidebar-footer>
+<div class=ur><div class=ua id=ua>T</div><div><div id=un style=font-size:12px>陶可馨</div><div id=ur style=font-size:10px;color:var(--t3)>admin</div></div></div>
+<div style=display:flex;justify-content:space-between><span><span class=dot></span>运行中</span><span class=lo onclick=logout()>退出</span></div>
+</div></aside>
+<div class=main>
+<div class=top><div class=pt><span class=em>📊</span><span id=pt>数据驾驶舱</span></div><div class=ri><span id=tt></span><span id=tm></span></div></div>
+<div class=ca id=ca></div></div></div>
+<div style=display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:200;justify-content:center;align-items:center id=am>
+<div style=background:var(--bg2);border-radius:var(--r);padding:24px;width:380px;max-width:90vw;border:1px solid var(--bd)>
+<h3 style=margin-bottom:16px>新建持仓</h3>
+<input id=ac placeholder="代码 300750.SZ" style=width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:10px>
+<input id=an placeholder=名称 style=width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:10px>
+<input id=as type=number placeholder=数量 style=width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:10px>
+<input id=acp type=number step=.001 placeholder=成本价 style=width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:10px>
+<input id=ad type=date style=width:100%;padding:8px 12px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:6px;margin-bottom:16px>
+<div style=display:flex;gap:8px><button class=login-btn style=width:auto;padding:6px 14px;font-size:.82em;background:#065f46 onclick=saveHold()>✅ 保存</button><button class=login-btn style=width:auto;padding:6px 14px;font-size:.82em;background:#1e293b onclick=closem()>取消</button></div></div></div>
+<script>
+const A='/stock-v2/api/v2';let T='',U={};
+async function api(p,m,b){const h={'Content-Type':'application/json'};if(T)h.Authorization='Bearer '+T;const o={method:m||'GET',headers:h};if(b)o.body=JSON.stringify(b);return(await fetch(A+p,o)).json()}
+function doLogin(){const u=(document.getElementById('lu').value||'tony').trim(),p=(document.getElementById('lpw').value||'tony123').trim(),b=document.getElementById('lb'),e=document.getElementById('le')
+b.disabled=1;b.textContent='登录中...';e.textContent=''
+api('/auth/token','POST',{username:u,password:p}).then(d=>{if(d.code===0&&d.data&&d.data.token){T=d.data.token;U={role:d.data.role,name:d.data.display_name||d.data.user}
+document.getElementById('lp').style.display='none';document.getElementById('al').style.display='flex'
+document.getElementById('ua').textContent=(U.name||'T').charAt(0).toUpperCase();document.getElementById('un').textContent=U.name;document.getElementById('ur').textContent=U.role
+document.getElementById('tm').textContent=new Date().toLocaleString('zh-CN',{hour12:false})
+setInterval(()=>{document.getElementById('tm').textContent=new Date().toLocaleString('zh-CN',{hour12:false})},10000)
+rp('dashboard')}else{e.textContent='用户名或密码错误';b.disabled=0;b.textContent='登 录'}}).catch(()=>{e.textContent='网络错误';b.disabled=0;b.textContent='登 录'})}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('lp').style.display!=='none')doLogin()})
+function logout(){T='';U={};document.getElementById('al').style.display='none';document.getElementById('lp').style.display='flex';document.getElementById('lpw').value=''}
+function sp(n,el){document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));if(el)el.classList.add('active')
+const t={'dashboard':'数据驾驶舱','strategy':'策略信号','holdings':'持仓管理','sector':'板块轮动','config':'系统设置'},e={'dashboard':'📊','strategy':'📋','holdings':'💼','sector':'🌀','config':'⚙️'}
+document.getElementById('pt').textContent=t[n]||n;document.querySelector('.top .pt .em').textContent=e[n]||'📊';rp(n)}
+function rp(n){const c=document.getElementById('ca');c.innerHTML='<div style=text-align:center;padding:40px><div class=loading-spinner></div></div>'
+if(n==='dashboard')rd(c);else if(n==='strategy')rs(c);else if(n==='holdings')rh(c);else if(n==='sector')rc(c);else if(n==='config')rx(c)}
+function closem(){document.getElementById('am').style.display='none'}
+async function rd(c){const d=await api('/dashboard');if(d.code!==0){c.innerHTML='<div style=text-align:center;padding:40px;color:var(--t3)>数据加载失败</div>';return}
+const dt=d.data||{},mk=dt.market||{},dist=dt.distribution||{},t=(dist.strong_buy||0)+(dist.buy||0)+(dist.cautious||0)+(dist.hold||0)+(dist.sell||0)||1
+const s=(v,cl)=>v?`<div class=ds style=flex:${v/t};background:${cl}>${v}</div>`:''
+const pf=dt.portfolio||{},pp=pf.total_profit||0
+c.innerHTML=`<div class=mc><div class=ms><span class=em>${mk.season_emoji||'❓'}</span><span>${mk.season_label||'未知'}</span></div><div class=mst>
+<div class=msi><div class=no>${(mk.raw_score||0).toFixed(0)}</div><div class=ti>评分</div></div>
+<div class=msi><div class=no>${((mk.confidence||0)*100).toFixed(0)}%</div><div class=ti>置信度</div></div>
+<div class=msi><div class=no>${mk.position_advice||'--'}</div><div class=ti>建议</div></div>
+<div class=msi><div class=no>${mk.hengjiyuan_level||'--'}</div><div class=ti>纪元</div></div></div></div>
+<div class=g2><div class=card><h3>🏆 Top5 评分 <span class=cnt>${dt.trade_date||''}</span></h3>
+${(dt.top5||[]).map((s,i)=>`<div class=ri><div class=rn>${i+1}</div><div class=ra><div class=n>${s.name||s.ts_code}</div><div class=ind>${s.industry||''}</div></div>
+<div><span class=rs>${(s.composite_score||0).toFixed(1)}</span><span class="sb ${(s.signal_type||'')==='STRONG_BUY'?'sb1':(s.signal_type||'')==='BUY'?'sb2':(s.signal_type||'').includes('CAUTIOUS')?'sb3':'sb4'}">${s.signal_label||s.signal_type||''}</span></div></div>`).join('')||'<div class=ri>暂无数据</div>'}</div>
+<div class=card><h3>📊 信号分布</h3><div class=db>${s(dist.strong_buy,'#059669')}${s(dist.buy,'#0ea5e9')}${s(dist.cautious,'#f59e0b')}${s(dist.hold,'#64748b')}${s(dist.sell,'#dc2626')}</div>
+<div style=display:flex;justify-content:space-between;font-size:.78em;color:var(--t3)><span>🟢${dist.strong_buy||0}</span><span>🔵${dist.buy||0}</span><span>🟡${dist.cautious||0}</span><span>⚪${dist.hold||0}</span><span>🔴${dist.sell||0}</span></div></div></div>
+<div class=g2 style=margin-top:16px><div class=card><h3>💼 持仓概览</h3><div class=ps><div class=it><div class=no>${pf.total_stocks||0}</div><div class=lb>持仓</div></div>
+<div class=it><div class=no style=${pp>=0?'color:var(--bull)':'color:var(--bear)'}>¥${(pf.total_value||0).toLocaleString()}</div><div class=lb>总市值</div></div>
+<div class=it><div class=no style=${pp>=0?'color:var(--bull)':'color:var(--bear)'}>${pp>=0?'+':''}¥${(pp||0).toLocaleString()}</div><div class=lb>总盈亏</div></div></div></div>
+<div class=card><h3>⚙️ 系统</h3><div id=si></div></div></div>`
+document.getElementById('tt').textContent='📅 '+(dt.trade_date||'')
+const si=await api('/system/health');if(si.code===0){const s=si.data||{};document.getElementById('si').innerHTML=`<div style=display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:.82em><span style=color:var(--t3)>服务:</span><span style=color:var(--bear)>🟢 ${s.status}</span><span style=color:var(--t3)>数据库:</span><span style=color:var(--bear)>🟢 ${s.database}</span><span style=color:var(--t3)>版本:</span><span>v${s.version}</span><span style=color:var(--t3)>磁盘:</span><span>${s.disk_usage||'--'}</span><span style=color:var(--t3)>评分:</span><span>291只</span></div>`}}
+async function rs(c){const[sd,cp]=await Promise.all([api('/strategy/signals'),api('/strategy/checkpoints')])
+const sh=(sd.data.signals||[]).map((s,i)=>`<tr><td style=color:var(--t3)>${i+1}</td><td style=font-size:.82em;color:var(--t3)>${s.ts_code||''}</td><td><b>${s.name||''}</b></td><td><span class=rs>${(s.composite_score||0).toFixed(1)}</span></td><td><span class="sb ${(s.signal_type||'')==='STRONG_BUY'?'sb1':(s.signal_type||'')==='BUY'?'sb2':(s.signal_type||'').includes('CAUTIOUS')?'sb3':'sb4'}">${s.signal_label||s.signal_type||''}</span></td><td>${(s.trend_score||0).toFixed(1)}</td><td>${(s.momentum_score||0).toFixed(1)}</td><td>${(s.structure_score||0).toFixed(1)}</td><td>${(s.emotion_score||0).toFixed(1)}</td></tr>`).join('')||'<tr><td colspan=9 style=text-align:center;color:var(--t3)>暂无数据</td></tr>'
+const ch=(cp.data.checkpoints||[]).map(p=>`<div class=ri><span style=font-weight:600>${p.name}</span><span style=margin:0 12px;font-size:.82em;color:var(--t3)>${p.hold_days||0}日</span><span style=margin-right:12px;font-weight:600;${p.profit_pct>=0?'color:var(--bull)':'color:var(--bear)'}>${p.profit_pct>=0?'+':''}${(p.profit_pct||0).toFixed(1)}%</span><span class="sb sb4">${p.action_label||p.action||''}</span><span style=margin-left:12px;font-size:.78em;color:var(--t3)>${p.reason||''}</span></div>`).join('')||'<div style=color:var(--t3);text-align:center;padding:12px>暂无持仓</div>'
+c.innerHTML=`<div class=card><h3>📊 策略信号 (${sd.data.signals?.length||0}条)</h3><div style=max-height:500px;overflow-y:auto><table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>评分</th><th>信号</th><th>趋势</th><th>动量</th><th>结构</th><th>情绪</th></tr></thead><tbody>${sh}</tbody></table></div></div><div class=card><h3>🔍 持仓检查点</h3>${ch}</div>`}
+async function rh(c){await api('/holdings/calc');const d=await api('/holdings');const hs=d.data.holdings||[];let tc=0,tv=0,tp=0;hs.forEach(h=>{if(['hold','locked'].includes((h.status||'').toLowerCase())){tc++;tv+=h.market_value||0;tp+=h.profit_amount||0}})
+const r2=hs.map(h=>{const pp=h.profit_pct||0,pa=h.profit_amount||0
+return `<tr><td style=font-size:.82em;color:var(--t3)>${h.ts_code||''}</td><td><b>${h.name||''}</b></td><td>${h.shares||0}</td><td>¥${(h.cost_price||0).toFixed(2)}</td><td>¥${(h.current_price||0).toFixed(2)}</td><td>¥${(h.market_value||0).toFixed(2)}</td><td style=${pp>=0?'color:var(--bull)':'color:var(--bear)'}>${pp>=0?'+':''}${pp.toFixed(2)}%</td><td style=${pa>=0?'color:var(--bull)':'color:var(--bear)'}>${pa>=0?'+':''}¥${pa.toFixed(2)}</td><td><span class="sb ${(h.status||'')==='locked'?'sb3':'sb2'}">${h.status||'-'}</span></td></tr>`}).join('')||'<tr><td colspan=9 style=text-align:center;color:var(--t3)>暂无持仓</td></tr>'
+c.innerHTML=`<div class=g3><div class=card><div class=ps style=justify-content:center><div class=it><div class=no>${tc}</div><div class=lb>持仓</div></div></div></div><div class=card><div class=ps style=justify-content:center><div class=it><div class=no>¥${tv.toLocaleString()}</div><div class=lb>总市值</div></div></div></div><div class=card><div class=ps style=justify-content:center><div class=it><div class=no style=${tp>=0?'color:var(--bull)':'color:var(--bear)'}>${tp>=0?'+':''}¥${tp.toLocaleString()}</div><div class=lb>总盈亏</div></div></div></div></div><div class=card><div style=display:flex;gap:8px;margin-bottom:12px><button class=login-btn style=width:auto;padding:6px 14px;font-size:.82em;background:#065f46 onclick=document.getElementById('am').style.display='flex'>＋ 新建</button><button class=login-btn style=width:auto;padding:6px 14px;font-size:.82em;background:#0f3460 onclick=rh(document.getElementById('ca'))>🔄 刷新</button></div><div style=max-height:450px;overflow-y:auto><table><thead><tr><th>代码</th><th>名称</th><th>持股</th><th>成本</th><th>现价</th><th>市值</th><th>盈亏%</th><th>盈亏¥</th><th>状态</th></tr></thead><tbody>${r2}</tbody></table></div></div>`}
+async function saveHold(){const c=document.getElementById('ac').value.trim(),n=document.getElementById('an').value.trim(),s=parseInt(document.getElementById('as').value),cp=parseFloat(document.getElementById('acp').value),d=document.getElementById('ad').value
+if(!c||!n||!s||!cp){alert('请填写完整');return}
+const r=await api('/holdings','POST',{ts_code:c,name:n,shares:s,cost_price:cp,buy_date:d})
+if(r.code===0){document.getElementById('am').style.display='none';rh(document.getElementById('ca'))}else alert('失败: '+r.message)}
+async function rc(c){const d=await api('/sector/top');const rows=(d.data?.from_index||d.data?.from_chanlun||[]);const h=rows.map((s,i)=>`<tr><td style=color:var(--t3)>${i+1}</td><td><b>${s.sector_name||''}</b></td><td style=${(s.change_pct||0)>=0?'color:var(--bull)':'color:var(--bear)'}>${(s.change_pct||0).toFixed(2)}%</td><td style=color:var(--t3)>${s.trend_type||'--'}</td><td>${(s.structure_score||0).toFixed(1)}</td><td style=color:var(--t3)>${s.stock_count||'--'}</td></tr>`).join('')||'<tr><td colspan=6 style=text-align:center;color:var(--t3)>暂无数据</td></tr>'
+c.innerHTML=`<div class=card><h3>🌀 板块排行</h3><div style=max-height:500px;overflow-y:auto><table><thead><tr><th>#</th><th>板块</th><th>涨幅</th><th>趋势</th><th>评分</th><th>股票数</th></tr></thead><tbody>${h}</tbody></table></div></div>`}
+async function rx(c){const[sc,sh]=await Promise.all([api('/strategy/config'),api('/system/health')]);const cfg=sc.data?.config||{};const ks=['strong_buy_threshold','buy_threshold','cautious_buy_threshold','hold_threshold','buy_min_score','stop_loss_pct','trailing_stop_pct','max_hold_days','p1_check_day','p2_check_day','p3_check_day','p4_close_day','position_max_pct']
+const gn=ks.map(k=>{const v=cfg[k]?.value||'';return `<div style=background:var(--bg4);border-radius:6px;padding:10px><div style=font-size:.78em;color:var(--t3)>${k.replace(/_/g,' ')}</div><input value="${v}" data-k="${k}" style=width:100%;margin-top:4px;padding:4px 8px;background:var(--bg6);border:1px solid var(--bd);color:var(--t1);border-radius:4px></div>`}).join('')
+c.innerHTML=`<div class=card><h3>⚙️ 策略参数</h3><div class=g4>${gn}</div><div style=margin-top:12px><button class=login-btn style=width:auto;padding:6px 14px;font-size:.82em;background:#065f46 onclick=saveCfg()>💾 保存</button></div></div><div class=card><h3>📦 系统信息</h3><div style=display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:.82em><span style=color:var(--t3)>服务:</span><span>${sh.data?.status||'--'}</span><span style=color:var(--t3)>数据库:</span><span>${sh.data?.database||'--'}</span><span style=color:var(--t3)>版本:</span><span>v${sh.data?.version||'--'}</span><span style=color:var(--t3)>磁盘:</span><span>${sh.data?.disk_usage||'--'}</span></div></div>`}
+async function saveCfg(){const inp=document.querySelectorAll('[data-k]');let ok=0,fail=0;for(const el of inp){const k=el.dataset.k,v=el.value;if(!k)continue;const d=await api('/strategy/config','PUT',{config_key:k,config_value:v});if(d.code===0)ok++;else fail++}alert(`保存: ${ok}成功${fail?', '+fail+'失败':''}`)}
+</script>
+</body></html>

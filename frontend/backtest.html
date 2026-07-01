@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>引擎参数 — 股票智能分析系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#c8d6e5;min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #1e2a3a;margin-bottom:20px}
+.header h1{font-size:22px;color:#fff}
+.header .info{font-size:13px;color:#6b7f9e}
+.card{background:linear-gradient(145deg,#141e30,#1a2744);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #1e2a3a}
+.card-title{font-size:14px;color:#8a9bb5;margin-bottom:12px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+
+/* 市场状态 */
+.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.mkt-item{background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;text-align:center}
+.mkt-item .lb{font-size:11px;color:#6b7f9e}
+.mkt-item .val{font-size:20px;font-weight:700;margin-top:4px}
+
+/* 参数表 */
+.param-table{width:100%;border-collapse:collapse}
+.param-table th{text-align:left;padding:10px 12px;font-size:12px;color:#6b7f9e;border-bottom:1px solid #1e2a3a;font-weight:600}
+.param-table td{padding:10px 12px;font-size:13px;border-bottom:1px solid rgba(30,42,58,0.5)}
+.param-table tr:hover td{background:rgba(255,255,255,0.02)}
+.season-tag{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.season-tag.summer{background:rgba(231,76,60,0.15);color:#e74c3c}
+.season-tag.chaos_spring{background:rgba(243,156,18,0.15);color:#f39c12}
+.season-tag.chaos{background:rgba(155,89,182,0.15);color:#9b59b6}
+.season-tag.chaos_autumn{background:rgba(52,152,219,0.15);color:#3498db}
+.season-tag.autumn{background:rgba(231,76,60,0.15);color:#e74c3c}
+.season-tag.winter{background:rgba(149,165,166,0.15);color:#95a5a6}
+.season-tag.spring{background:rgba(46,204,113,0.15);color:#2ecc71}
+.season-tag.ALL{background:rgba(255,255,255,0.1);color:#fff}
+.num{font-weight:700}
+
+.loading{text-align:center;padding:40px}
+.spinner{width:32px;height:32px;border:3px solid #1e2a3a;border-top-color:#3498db;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header" style=display:flex;align-items:center>
+    <a href=/stock-v2/ style=color:var(--accent);text-decoration:none;font-size:.85em;margin-right:12px>← 返回驾驶舱</a>
+    <h1>⚙️ 引擎参数</h1>
+    <span class="info" style=margin-left:auto>P6双轨引擎 · 季节动态参数矩阵</span>
+  </div>
+  <div class="card">
+    <div class="card-title">版本管理</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <select id="verSelect" style="padding:8px 12px;border:1px solid #1e2a3a;border-radius:6px;background:#0d1525;color:#c8d6e5;font-size:14px;min-width:200px"><option value="">选择版本</option></select>
+      <button class="btn btn-primary" onclick="switchVersion()" style="padding:8px 16px;font-size:13px">切换</button>
+      <button class="btn btn-success" onclick="saveSnapshot()" style="padding:8px 16px;font-size:13px">保存</button>
+    </div>
+    <div id="versionInfo" style="font-size:12px;color:#6b7f9e;margin-top:8px"></div>
+  </div>
+  <div id="app"><div class="loading"><div class="spinner"></div><div>加载参数中...</div></div></div>
+</div>
+
+<script>
+const API = '/stock-v2/api/v2';
+
+const SEASON_EMOJI = {summer:'☀️',chaos_spring:'🌤️',chaos:'🌪️',chaos_autumn:'🌥️',autumn:'🍂',winter:'❄️',spring:'🌸',ALL:'📋'};
+const SEASON_LABEL = {summer:'夏季(持有)',chaos_spring:'弱春(偏多)',chaos:'混沌(观望)',chaos_autumn:'弱秋(偏空)',autumn:'秋季(防守)',winter:'冬季(休眠)',spring:'春季(进攻)',ALL:'全局默认'};
+
+function st(season) {
+  const e = SEASON_EMOJI[season]||'🌪️';
+  const l = SEASON_LABEL[season]||season;
+  return '<span class="season-tag '+season+'">'+e+' '+l+'</span>';
+}
+
+async function load() {
+  try {
+    // 1. 拉取strategy/config（季节参数矩阵）
+    const [sr, dr] = await Promise.all([
+      fetch(API + '/strategy/config').then(r=>r.json()),
+      fetch(API + '/dashboard').then(r=>r.json())
+    ]);
+    
+    var configs = (sr.data && sr.data.items) || sr.data || [];
+    var dash = dr.data || {};
+    var mkt = dash.market || {};
+    var today = dash.trade_date || '--';
+    var signalDist = dash.distribution || dash.signal_distribution || {};
+    var totalSignals = 0; for(var k in signalDist) totalSignals += signalDist[k];
+    
+    var seasonEmoji = {'chaos':'🌪️','chaos_spring':'🌤️','chaos_autumn':'🌥️','summer':'☀️','autumn':'🍂','winter':'❄️','spring':'🌸'};
+    var seasonLabels = {'chaos':'混沌观望','chaos_spring':'弱春偏多','chaos_autumn':'弱秋偏空','summer':'夏季持有','autumn':'秋季防守','winter':'冬季休眠','spring':'春季进攻'};
+    var regimeLabels = {'bull':'🐂牛市','bear':'🐻熊市','range':'📊震荡'};
+    var scoringLabels = {'momentum':'动量轨道(A)','reversion':'回归轨道(B)'};
+    
+    var html = '';
+    
+    // 当前市场状态
+    html += '<div class=card><div class=card-title>📊 当前市场状态 <span class=info>'+today+'</span></div>';
+    html += '<div class=mkt-grid>';
+    html += '<div class=mkt-item><div class=lb>季节</div><div class=val>'+(seasonEmoji[mkt.season]||'🌪️')+' '+(seasonLabels[mkt.season]||'混沌')+'</div></div>';
+    html += '<div class=mkt-item><div class=lb>恒纪元</div><div class=val style=font-size:16px>'+(mkt.hengji||'weak_heng')+'</div></div>';
+    html += '<div class=mkt-item><div class=lb>体制</div><div class=val>'+(regimeLabels[mkt.regime]||'📊震荡')+'</div></div>';
+    html += '<div class=mkt-item><div class=lb>评分策略</div><div class=val style=font-size:14px>'+(scoringLabels[dash.scoring_strategy]||'动量')+'</div></div>';
+    html += '<div class=mkt-item><div class=lb>指数评分</div><div class=val style=color:'+(mkt.score>0?'#2ecc71':'#e74c3c')+'>'+Number(mkt.score||0).toFixed(1)+'</div></div>';
+    html += '<div class=mkt-item><div class=lb>置信度</div><div class=val>'+Number((mkt.confidence||0.5)*100).toFixed(0)+'%</div></div>';
+    html += '</div></div>';
+    
+    // 信号分布概要
+    html += '<div class=card><div class=card-title>📈 信号分布 <span class=info>'+totalSignals+'只已评分</span></div><div style=display:flex;gap:16px;flex-wrap:wrap>';
+    var items = [['strong_buy','强买','#2ecc71'],['buy','买入','#3498db'],['hold','持有','#f39c12'],['wait','等待','#6b7f9e']];
+    for(var i=0;i<items.length;i++){
+      var v = signalDist[items[i][0]]||0;
+      if(v>0)html += '<div style="flex:1;min-width:70px;text-align:center;padding:10px;border-radius:8px;background:'+items[i][2]+'15;border:1px solid '+items[i][2]+'30"><div style=font-size:20px;font-weight:700;color:'+items[i][2]+'>'+v+'</div><div style=font-size:11px;color:#8a9bb5>'+items[i][1]+'</div></div>';
+    }
+    html += '</div></div>';
+    
+    // 季节参数矩阵
+    html += '<div class=card><div class=card-title>🗂️ 季节参数矩阵</div>';
+    html += '<table class=param-table><tr><th>季节</th><th>策略名称</th><th>买入阈值</th><th>单只仓位</th><th>总仓位上限</th><th>止损</th><th>止盈回撤</th><th>冷却日</th><th>最大持有</th><th>检视点P1/P2/P3</th></tr>';
+    
+    // 按顺序排列
+    var order = ['ALL','summer','chaos_spring','spring','chaos','chaos_autumn','autumn','winter'];
+    for(var oi=0;oi<order.length;oi++){
+      var sid = order[oi];
+      var cfg = null;
+      for(var ci=0;ci<configs.length;ci++){
+        if(configs[ci].season_type === sid) { cfg = configs[ci]; break; }
+      }
+      if(cfg) {
+        var em = SEASON_EMOJI[sid]||'';
+        var lb = SEASON_LABEL[sid]||sid;
+        // 兼容新旧API格式
+        var p = cfg.params || cfg;
+        html += '<tr>';
+        html += '<td>'+st(sid)+'</td>';
+        html += '<td>'+(cfg.name||'')+'</td>';
+        html += '<td class=num>≥'+(p.buy_min_score||80)+'分</td>';
+        html += '<td class=num style=color:'+((p.max_pos_pct||5)>=30?'#2ecc71':'#f39c12')+'>'+(p.max_pos_pct||5)+'%</td>';
+        html += '<td class=num style=color:'+((p.max_total_pct||30)>=35?'#2ecc71':'#f39c12')+'>'+(p.max_total_pct||30)+'%</td>';
+        html += '<td class=num style=color:#e74c3c>-'+Number(p.stop_loss_pct||8).toFixed(0)+'%</td>';
+        html += '<td class=num style=color:#2ecc71>'+Number(p.trailing_stop_pct||12).toFixed(0)+'%</td>';
+        html += '<td class=num>'+(p.cool_days||15)+'日</td>';
+        html += '<td class=num>'+(p.max_hold_days||20)+'日</td>';
+        html += '<td class=num>'+(p.p1_score||10)+'/'+(p.p2_score||20)+'/'+(p.p3_score||30)+'</td>';
+        html += '</tr>';
+      }
+    }
+    html += '</table></div>';
+    
+    // 引擎说明
+    html += '<div class=card><div class=card-title>🧠 引擎说明</div>';
+    html += '<div style=font-size:13px;color:#8a9bb5;line-height:1.8>';
+    html += '<p><b>评分引擎：</b>P6双轨引擎（动量轨道A / 回归轨道B）</p>';
+    html += '<p><b>评分范围：</b>综合分 0~100，校准分 0~80</p>';
+    html += '<p><b>买入逻辑：</b>每日评分≥买入阈值 + 评分排序Top N + 单票≤总资金×单票上限% + 总仓≤季节总仓上限%</p>';
+    html += '<p><b>方案C（当前实装）：</b>买入用总资金算单票上限(不是现金) + 总仓位硬上限保护 + 回撤超15%自动降仓25%</p>';
+    html += '<p><b>持仓逻辑：</b>检视点检查(5/10/20/30日) + 止损(-T1%) + 移动止盈(15%回撤) + 最大持有X日(按季节)</p>';
+    html += '<p><b>冷却期：</b>卖出后同一只股票无法立即再买</p>';
+    html += '<p><b>季节切换：</b>每天根据SeasonEngine自动判断市场状态，选择对应季节的参数</p>';
+    html += '</div></div>';
+    
+    document.getElementById('app').innerHTML = html;
+  } catch(e) {
+    document.getElementById('app').innerHTML = '<div style=text-align:center;padding:40px;color:#e74c3c>加载失败: '+e.message+'</div>';
+  }
+}
+
+load();
+
+
+function loadVer(){
+  var sel = document.getElementById('verSelect');
+  fetch('/stock-v2/api/v2/strategy/versions').then(function(r){return r.json()}).then(function(d){
+    var vs = d.data?.versions || [];
+    sel.innerHTML = '<option value="">选择版本</option>';
+    for(var i=0;i<vs.length;i++){
+      sel.innerHTML += '<option value="'+vs[i].version+'">V'+vs[i].version+'</option>';
+    }
+    var info = document.getElementById('versionInfo');
+    if(info && vs.length>0) info.innerHTML = '当前V'+vs[0].version;
+  });
+}
+function switchVersion(){
+  var sel = document.getElementById('verSelect'), ver = sel.value;
+  if(!ver||ver==''){alert('选版本');return}
+  if(!confirm('切到V'+ver+'?'))return;
+  fetch('/stock-v2/api/v2/strategy/version/'+ver+'/apply',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    if(d.code===0){alert('已切到V'+ver);location.reload()}
+    else{alert('失败')}
+  });
+}
+function saveSnapshot(){
+  fetch('/stock-v2/api/v2/strategy/version/snapshot',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
+    if(d.code===0){alert('已保存V'+d.data.version);location.reload()}
+    else{alert('失败')}
+  });
+}
+loadVer();
+</script>
+</body>
+</html>

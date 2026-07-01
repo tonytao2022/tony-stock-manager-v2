@@ -1,0 +1,13 @@
+[Unit]
+Description=Stock System v2 Daily Pipeline
+After=stock-system-v2.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/stock-system-v2/backend
+Environment=PYTHONPATH=/root/stock-system-v2/backend
+Environment=DB_NAME=stock_db_v2
+ExecStart=/root/stock-system-v2/venv/bin/python pipelines/daily_orch.py
+StandardOutput=append:/tmp/stock_pipeline_v2.log
+StandardError=append:/tmp/stock_pipeline_v2.log
