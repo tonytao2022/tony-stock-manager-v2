@@ -512,17 +512,19 @@ def watch_pool_score():
     cu.execute("SELECT MAX(trade_date) FROM strategy_signal")
     td = str(cu.fetchone()[0])
     
-    params = [td, td]
+    params = [td, td, td, td]
     sql = """
         SELECT wp.ts_code, COALESCE(wp.name, sb.name, ''), ss.composite_score, ss.calibrated_score, ss.raw_score,
                ss.trend_score, ss.momentum_score, ss.structure_score, ss.emotion_score,
                ss.signal_label, ss.direction, ss.season, ss.pos_score, ss.mf_score, ss.margin_score,
                ss.vol_ratio, COALESCE(sb.industry, ''),
-               dk.close, dk.change_pct
+               dk.close, dk.change_pct,
+               COALESCE(its.signal_label, ss.signal_label, '') as intraday_signal
         FROM watch_pool wp
         LEFT JOIN stock_basic sb ON wp.ts_code = sb.ts_code
         LEFT JOIN strategy_signal ss ON wp.ts_code = ss.ts_code AND ss.trade_date = %s
         LEFT JOIN daily_kline_qfq dk ON wp.ts_code = dk.ts_code AND dk.trade_date = %s
+        LEFT JOIN intraday_signals its ON wp.ts_code = its.ts_code AND its.trade_date = %s AND its.check_time = (SELECT MAX(check_time) FROM intraday_signals WHERE ts_code=wp.ts_code AND trade_date=%s)
         WHERE wp.is_active=1
     """
     
@@ -555,6 +557,7 @@ def watch_pool_score():
             'industry': r[16] if len(r) > 16 else '',
             'close_price': float(r[17]) if len(r) > 17 and r[17] else None,
             'change_pct': float(r[18]) if len(r) > 18 and r[18] else None,
+            'intraday_signal': r[19] if len(r) > 19 else '',
         })
     cu.close(); c.close()
     return ok({'stocks': stocks, 'total': len(stocks), 'trade_date': td})
@@ -1190,6 +1193,8 @@ def api_daily_score_snapshot():
         return ok({'data': rows, 'total': len(rows)})
     except Exception as e:
         return err(str(e))
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8891))
     print("V2统一API :" + str(port) + " DB:stock_db_v2")
