@@ -1,0 +1,189 @@
+diff --git a/backend/v2_unified_api.py b/backend/v2_unified_api.py
+index 186586e..e7bd8c2 100644
+--- a/backend/v2_unified_api.py
++++ b/backend/v2_unified_api.py
+@@ -7,8 +7,7 @@ import pymysql
+ def conn():
+     p = re.search(r'password\s*=\s*(\S+)', open('/etc/mysql/debian.cnf').read()).group(1)
+     return pymysql.connect(host='127.0.0.1', port=3306, user='debian-sys-maint',
+-                           password=p, database="stock_db_v2", charset="utf8mb4",
+-                           cursorclass=pymysql.cursors.DictCursor)
++                           password=p, database="stock_db_v2", charset="utf8mb4")
+ 
+ app = Flask(__name__)
+ app.config['JSON_AS_ASCII'] = False
+@@ -840,16 +839,14 @@ def api_board_seasons():
+     cu.execute("""SELECT index_code, season FROM season_state 
+         WHERE trade_date = (SELECT MAX(trade_date) FROM season_state WHERE index_code!='MARKET')
+         AND index_code!='MARKET' AND index_code!='399106.SZ'""")
+-    seasons_399106 = {'399106.SZ': 'chaos'}
+-    cu2 = conn(); c2 = cu2.cursor()
++    seasons = {r[0]: r[1] for r in cu.fetchall()}
++    cu.close(); c.close()
++    c2 = conn(); cu2 = c2.cursor()
+     cu2.execute("SELECT season FROM season_state WHERE index_code='399106.SZ' ORDER BY trade_date DESC LIMIT 1")
+     r2 = cu2.fetchone()
+     if r2:
+-        seasons_399106['399106.SZ'] = r2[0]
++        seasons['399106.SZ'] = r2[0]
+     cu2.close(); c2.close()
+-    seasons.update(seasons_399106)
+-    seasons = {r[0]: r[1] for r in cu.fetchall()}
+-    cu.close(); c.close()
+     return ok(seasons)
+ 
+ 
+@@ -897,6 +894,32 @@ def api_dragon_list():
+         return ok({'data':res,'trade_date':td,'total':len(res),'strong':len([x for x in res if x['action_level']=='strong']),'buy':len([x for x in res if x['action_level']=='buy']),'watch':len([x for x in res if x['action_level']=='watch'])})
+     except Exception as e:
+         import traceback;return err(str(e)+'|'+traceback.format_exc()[:200])
++
++@app.route('/api/v2/dragon/snapshot', methods=['GET'])
++def api_dragon_snapshot():
++    """打板评分快照查询"""
++    try:
++        ts_code = request.args.get('ts_code', '')
++        trade_date = request.args.get('trade_date', '')
++        limit = min(int(request.args.get('limit', 50)), 500)
++        c = conn(); cu = c.cursor()
++        sql = "SELECT * FROM dragon_snapshot WHERE 1=1"
++        params = []
++        if ts_code:
++            sql += " AND ts_code LIKE %s"
++            params.append('%' + ts_code + '%')
++        if trade_date:
++            sql += " AND trade_date = %s"
++            params.append(trade_date)
++        sql += " ORDER BY trade_date DESC, dragon_score DESC LIMIT %s"
++        params.append(limit)
++        cu.execute(sql, params)
++        cols = [d[0] for d in cu.description]
++        rows = [dict(zip(cols, r)) for r in cu.fetchall()]
++        cu.close(); c.close()
++        return ok({'data': rows, 'total': len(rows)})
++    except Exception as e:
++        import traceback;return err(str(e)+'|'+traceback.format_exc()[:300])
+ @app.route('/api/v2/refresh-score', methods=['POST'])
+ def api_refresh_score():
+     """一键刷新V2新引擎评分"""
+@@ -1053,6 +1076,120 @@ def api_trade_delete(record_id):
+     cu.close(); c.close()
+     return ok({'deleted': record_id})
+ 
++
++@app.route('/api/v2/stock/search', methods=['GET'])
++def api_stock_search():
++    """搜索股票"""
++    try:
++        kw = request.args.get('keyword', '')
++        if not kw: return ok({'stocks': []})
++        c = conn(); cu = c.cursor()
++        cu.execute("SELECT ts_code, name, industry, market FROM stock_basic WHERE name LIKE %s OR ts_code LIKE %s LIMIT 20",
++                   [f'%{kw}%', f'%{kw}%'])
++        cols = [d[0] for d in cu.description]
++        rows = [dict(zip(cols, r)) for r in cu.fetchall()]
++        cu.close(); c.close()
++        return ok({'stocks': rows})
++    except Exception as e:
++        return err(str(e))
++
++
++@app.route('/api/v2/stock/<ts_code>', methods=['GET'])
++def api_stock_detail(ts_code):
++    """股票详情"""
++    try:
++        c = conn(); cu = c.cursor()
++        cu.execute("SELECT * FROM stock_basic WHERE ts_code=%s", (ts_code,))
++        cols = [d[0] for d in cu.description]
++        r = cu.fetchone()
++        cu.close(); c.close()
++        return ok({'stock': dict(zip(cols, r)) if r else None})
++    except Exception as e:
++        return err(str(e))
++
++
++@app.route('/api/v2/intraday/signals', methods=['GET'])
++def api_intraday_signals():
++    """盘中信号"""
++    try:
++        td = request.args.get('trade_date', '')
++        tc = request.args.get('ts_code', '')
++        limit = min(int(request.args.get('limit', 310)), 620)
++        c = conn(); cu = c.cursor()
++        sql = "SELECT * FROM intraday_signals WHERE 1=1"; p = []
++        if td: sql += " AND trade_date=%s"; p.append(td)
++        if tc: sql += " AND ts_code LIKE %s"; p.append('%' + tc + '%')
++        sql += " ORDER BY check_time DESC LIMIT %s"; p.append(limit)
++        cu.execute(sql, p)
++        cols = [d[0] for d in cu.description]
++        rows = [dict(zip(cols, r)) for r in cu.fetchall()]
++        cu.close(); c.close()
++        for r in rows:
++            for k, v in list(r.items()):
++                if hasattr(v, 'isoformat'): r[k] = str(v)
++                elif hasattr(v, 'seconds'): r[k] = str(v)
++                elif isinstance(v, (bytes, bytearray)): r[k] = str(v, 'utf-8')
++        return ok({'data': rows, 'total': len(rows)})
++    except Exception as e:
++        import traceback;return err(str(e)+'|'+traceback.format_exc()[:300])
++
++
++@app.route('/api/v2/pipeline/status', methods=['GET'])
++def api_pipeline_status():
++    """管道状态"""
++    try:
++        import subprocess
++        r = subprocess.run(['tail','-5','/tmp/stock_pipeline_v2.log'], capture_output=True, text=True, timeout=5)
++        return ok({'log': r.stdout.strip().split('\n')})
++    except Exception as e:
++        return err(str(e))
++
++
++@app.route('/api/v2/pipeline/trigger', methods=['POST'])
++def api_pipeline_trigger():
++    """触发管道"""
++    try:
++        import subprocess
++        p = subprocess.Popen(['bash','/root/stock-system-v2/backend/close_pipeline.sh'], stdout=subprocess.DEVNULL)
++        return ok({'message': '管道已触发', 'pid': p.pid})
++    except Exception as e:
++        return err(str(e))
++
++
++@app.route('/api/v2/strategy/check/<ts_code>', methods=['GET'])
++def api_strategy_check(ts_code):
++    """单只持仓策略检查"""
++    try:
++        c = conn(); cu = c.cursor()
++        cu.execute("SELECT * FROM strategy_signal WHERE ts_code=%s ORDER BY trade_date DESC LIMIT 10", (ts_code,))
++        cols1 = [d[0] for d in cu.description]
++        sig = [dict(zip(cols1, r)) for r in cu.fetchall()]
++        cu.execute("SELECT * FROM portfolio_holdings WHERE ts_code=%s AND status='HOLDING'", (ts_code,))
++        cols2 = [d[0] for d in cu.description]
++        h = cu.fetchone()
++        cu.close(); c.close()
++        return ok({'signals': sig, 'holding': dict(zip(cols2, h)) if h else None})
++    except Exception as e:
++        return err(str(e))
++
++
++@app.route('/api/v2/daily-score-snapshot', methods=['GET'])
++def api_daily_score_snapshot():
++    """评分快照历史"""
++    try:
++        td = request.args.get('trade_date', '')
++        limit = min(int(request.args.get('limit', 50)), 500)
++        c = conn(); cu = c.cursor()
++        sql = "SELECT * FROM daily_score_snapshot WHERE 1=1"; p = []
++        if td: sql += " AND trade_date=%s"; p.append(td)
++        sql += " ORDER BY calibrated_score DESC LIMIT %s"; p.append(limit)
++        cu.execute(sql, p)
++        cols = [d[0] for d in cu.description]
++        rows = [dict(zip(cols, r)) for r in cu.fetchall()]
++        cu.close(); c.close()
++        return ok({'data': rows, 'total': len(rows)})
++    except Exception as e:
++        return err(str(e))
+ if __name__ == '__main__':
+     port = int(os.environ.get('PORT', 8891))
+     print("V2统一API :" + str(port) + " DB:stock_db_v2")
