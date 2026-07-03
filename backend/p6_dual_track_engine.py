@@ -66,13 +66,13 @@ class MarketContext:
         return 1.3 if self.is_momentum_track() else 1.0
 
     def get_hs300_trend(self) -> float:
-        """获取沪深300近5日涨幅，判断大盘强度"""
+        """获取沪深300近5日涨幅（从daily_kline读，qfq表数据不全）"""
         try:
             from db_config import get_connection
             conn = get_connection()
             cur = conn.cursor()
             cur.execute("""
-                SELECT close FROM daily_kline_qfq 
+                SELECT close FROM daily_kline 
                 WHERE ts_code='000300.SH' AND trade_date <= %s
                 ORDER BY trade_date DESC LIMIT 5
             """, (self.trade_date,))
@@ -90,15 +90,15 @@ class MarketContext:
 # ============================================================
 
 def _calc_vol_ratio(ts_code: str, trade_date: str) -> float:
-    """计算量比：当日vol / 前20日均vol"""
+    """计算量比：当日vol / 前20日均vol（从daily_kline读，qfq数据不全）"""
     try:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("""
             SELECT k.vol / NULLIF(ma.avg_vol, 0) as vol_ratio
-            FROM daily_kline_qfq k
+            FROM daily_kline k
             JOIN (
-                SELECT AVG(vol) as avg_vol FROM daily_kline_qfq 
+                SELECT AVG(vol) as avg_vol FROM daily_kline 
                 WHERE ts_code=%s AND trade_date < %s AND trade_date >= DATE_SUB(%s, INTERVAL 20 DAY)
             ) ma ON 1=1
             WHERE k.ts_code=%s AND k.trade_date=%s
@@ -743,7 +743,7 @@ def _is_strong_stock(code, ctx):
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT close FROM daily_kline_qfq
+            SELECT close FROM daily_kline
             WHERE ts_code=%s AND trade_date <= %s
             ORDER BY trade_date DESC LIMIT 20
         """, (code, ctx.trade_date))
