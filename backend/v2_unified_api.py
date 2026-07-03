@@ -168,11 +168,12 @@ def checkpoints():
 @app.route('/api/v2/strategy/config')
 def sconfig():
     c = conn(); cu = c.cursor()
-    cu.execute("SELECT id, name, season_type, buy_min_score, max_pos_pct, max_total_pct, position_tolerance, stop_loss_pct, trailing_stop_pct, cool_days, max_hold_days, p1_score, p2_score, p3_score, description FROM strategy_config WHERE 1=1 ORDER BY id")
+    # 只返回V13有效配置（id>=16），并包在items下供前端使用
+    cu.execute("SELECT id, name, season_type, buy_min_score, max_pos_pct, max_total_pct, position_tolerance, stop_loss_pct, trailing_stop_pct, cool_days, max_hold_days, p1_score, p2_score, p3_score, description FROM strategy_config WHERE id>=16 ORDER BY id")
     cols = [d[0] for d in cu.description]
     cfg = [dict(zip(cols, r)) for r in cu.fetchall()]
     cu.close(); c.close()
-    return ok(cfg)
+    return ok({'items': cfg})
 
 @app.route('/api/v2/holdings', methods=['GET', 'POST'])
 def holdings():
@@ -951,14 +952,15 @@ def api_dragon_snapshot():
         import traceback;return err(str(e)+'|'+traceback.format_exc()[:300])
 @app.route('/api/v2/refresh-score', methods=['POST'])
 def api_refresh_score():
-    """一键刷新V2新引擎评分"""
-    """一键刷新V2新引擎评分"""
+    """一键刷新V2新引擎评分（后台运行p6_dual_track）"""
     try:
         import subprocess
-        # 后台启动评分脚本
-        subprocess.Popen(['python3', '/tmp/score_v2_insert.py'], 
+        backend_dir = '/root/stock-system-v2/backend'
+        script = os.path.join(backend_dir, 'engines', 'p6_scorer.py')
+        subprocess.Popen(['python3', script],
+            cwd=backend_dir,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return ok({'message': '评分已启动，约1分钟后完成'})
+        return ok({'message': '评分已启动（双轨引擎），约1~2分钟后完成'})
     except Exception as e:
         return err(str(e))
 

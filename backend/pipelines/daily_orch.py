@@ -342,7 +342,7 @@ def _step_chanlun():
 
 
 def _step_score(trade_date):
-    """P6评分"""
+    """P6评分（双轨引擎）"""
     from engines.p6_scorer import run_scoring
     run_scoring(trade_date)
 
