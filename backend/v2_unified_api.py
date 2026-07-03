@@ -22,6 +22,10 @@ READ_WHITELIST = [
     '/api/v2/watch-pool/list',
     '/api/v2/dashboard',
     '/api/v2/strategy/signals',
+    '/api/v3/tide-score-list',
+    '/api/v3/tide-factor-detail',
+    '/api/v3/tide-chanlun',
+    '/api/v3/tide-config',
     '/api/v2/strategy/config',
     '/api/v2/holdings',
     '/api/v2/holdings/calc',
@@ -722,6 +726,9 @@ _data_refresh = importlib.import_module('routes.data_refresh')
 _data_refresh_router = _data_refresh.router
 app.register_blueprint(_data_refresh_router)
 
+import importlib
+_tide = importlib.import_module('tide_engine.tide_routes')
+app.register_blueprint(_tide.tide_bp)
 
 
 # ═══════════════════════════════════════════
