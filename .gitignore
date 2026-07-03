@@ -1,12 +1,14 @@
-__pycache__/
 *.pyc
-*.pyo
+__pycache__/
 .env
-*.log
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+db_backup/*.sql.gz
 venv/
-.venv/
-.DS_Store
-engines_archive/
-*.bak
-.gitignore
-# db_backup 由 git-lfs 追踪
+node_modules/

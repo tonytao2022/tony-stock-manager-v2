@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO,
 
 STEPS = [
     {'name': 'kline',     'desc': '拉取K线数据'},
+    {'name': 'moneyflow', 'desc': '资金流向'},
     {'name': 'season',    'desc': '季节判定'},
     {'name': 'chanlun',   'desc': '缠论分析'},
     {'name': 'score',     'desc': 'P6评分'},
@@ -83,6 +84,8 @@ def run():
 
             if step['name'] == 'kline':
                 _step_kline(trade_date)
+            elif step['name'] == 'moneyflow':
+                _step_moneyflow(trade_date)
             elif step['name'] == 'season':
                 _step_season(trade_date)
             elif step['name'] == 'chanlun':
@@ -229,6 +232,101 @@ def _step_kline(trade_date):
         except Exception as e:
             logger.error(f'[Kline] {code} 拉取失败: {e}')
             time.sleep(0.5)  # 限流
+
+
+def _step_moneyflow(trade_date):
+    """拉取全市场资金流向数据到moneyflow和money_flow两张表"""
+    import requests as req
+    token = os.environ.get('TUSHARE_TOKEN', '')
+    if not token:
+        logger.warning('[MoneyFlow] TUSHARE_TOKEN 未设置，跳过')
+        return
+    
+    td = trade_date.strftime('%Y%m%d')
+    url = 'http://api.tushare.pro'
+    headers = {'Content-Type': 'application/json'}
+    
+    payload = {
+        'api_name': 'moneyflow',
+        'token': token,
+        'params': {'trade_date': td}
+    }
+    
+    try:
+        resp = req.post(url, json=payload, headers=headers, timeout=30)
+        data = resp.json()
+        if data.get('code') != 0:
+            logger.warning(f'[MoneyFlow] Tushare返回错误: {data.get("msg")}')
+            return
+        items = data.get('data', {}).get('items', [])
+        fields = data.get('data', {}).get('fields', [])
+        if not items:
+            logger.info(f'[MoneyFlow] {td} 无数据（可能非交易日）')
+            return
+        
+        # 字段索引
+        def fi(name):
+            try: return fields.index(name)
+            except: return -1
+        idx_ts = fi('ts_code')
+        idx_td = fi('trade_date')
+        idx_nm = fi('net_mf_amount')
+        idx_bl = fi('buy_lg_amount')
+        idx_sl = fi('sell_lg_amount')
+        idx_bel = fi('buy_elg_amount')
+        idx_sel = fi('sell_elg_amount')
+        idx_bs = fi('buy_sm_amount')
+        idx_ss = fi('sell_sm_amount')
+        
+        saved_mf = 0
+        saved_flow = 0
+        with db_cursor() as cur:
+            for item in items:
+                tc = item[idx_ts] if idx_ts >= 0 else ''
+                tdate = trade_date.strftime('%Y-%m-%d')
+                try:
+                    nm = float(item[idx_nm]) if idx_nm >= 0 else 0
+                    bl = float(item[idx_bl]) if idx_bl >= 0 else 0
+                    sl = float(item[idx_sl]) if idx_sl >= 0 else 0
+                    bel = float(item[idx_bel]) if idx_bel >= 0 else 0
+                    sel = float(item[idx_sel]) if idx_sel >= 0 else 0
+                    bs = float(item[idx_bs]) if idx_bs >= 0 else 0
+                    ss = float(item[idx_ss]) if idx_ss >= 0 else 0
+                except:
+                    continue
+                
+                # 写入moneyflow表（保留全字段给评分引擎）
+                try:
+                    cur.execute("""
+                        INSERT INTO moneyflow (ts_code, trade_date, net_mf_amount, buy_lg_amount, sell_lg_amount, buy_sm_amount, sell_sm_amount, buy_elg_amount, sell_elg_amount)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE net_mf_amount=VALUES(net_mf_amount),
+                            buy_lg_amount=VALUES(buy_lg_amount), sell_lg_amount=VALUES(sell_lg_amount),
+                            buy_sm_amount=VALUES(buy_sm_amount), sell_sm_amount=VALUES(sell_sm_amount),
+                            buy_elg_amount=VALUES(buy_elg_amount), sell_elg_amount=VALUES(sell_elg_amount)
+                    """, (tc, tdate, nm, bl, sl, bs, ss, bel, sel))
+                    saved_mf += 1
+                except: pass
+                
+                # 写入money_flow表（精简字段给其他模块）
+                try:
+                    main_net = bl - sl + bel - sel  # 主力净=大单+特大单
+                    retail_net = bs - ss             # 散户净=小单
+                    total_buy = bl + bel
+                    total_sell = sl + sel
+                    net_val = nm
+                    cur.execute("""
+                        INSERT INTO money_flow (ts_code, trade_date, main_net, retail_net, buy_value, sell_value, net_value)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE main_net=VALUES(main_net), retail_net=VALUES(retail_net),
+                            buy_value=VALUES(buy_value), sell_value=VALUES(sell_value), net_value=VALUES(net_value)
+                    """, (tc, tdate, main_net, retail_net, total_buy, total_sell, net_val))
+                    saved_flow += 1
+                except: pass
+        
+        logger.info(f'[MoneyFlow] moneyflow入库{saved_mf}条, money_flow入库{saved_flow}条')
+    except Exception as e:
+        logger.error(f'[MoneyFlow] 拉取失败: {e}')
 
 
 def _step_season(trade_date):

@@ -1,0 +1,18 @@
+[Unit]
+Description=Stock-V2 Unified API (Flask, port 8891)
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/stock-system-v2/backend
+ExecStartPre=/bin/bash -c 'fuser -k 8891/tcp 2>/dev/null; sleep 1'
+ExecStart=/usr/bin/python3 /root/stock-system-v2/backend/v2_unified_api.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/stock-v2-unified-api.log
+StandardError=append:/var/log/stock-v2-unified-api.log
+
+[Install]
+WantedBy=multi-user.target

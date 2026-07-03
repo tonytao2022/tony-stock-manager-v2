@@ -472,7 +472,7 @@ class ScoreEngineV4:
         tc_macd=None; tc_boll=None; tc_kdj=None
         try:
             _cur=get_connection().cursor(pymysql.cursors.DictCursor)
-            _cur.execute("SELECT net_mf_amount, buy_lg_amount-sell_lg_amount as lg_net, buy_elg_amount-sell_elg_amount as elg_net FROM money_flow WHERE ts_code=%s ORDER BY trade_date DESC LIMIT 1",(ts_code,))
+            _cur.execute("SELECT net_mf_amount, buy_lg_amount-sell_lg_amount as lg_net, buy_elg_amount-sell_elg_amount as elg_net FROM moneyflow WHERE ts_code=%s ORDER BY trade_date DESC LIMIT 1",(ts_code,))
             _r=_cur.fetchone()
             if _r:
                 mf_net=float(_r['net_mf_amount']or 0)

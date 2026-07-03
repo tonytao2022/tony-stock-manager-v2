@@ -84,7 +84,7 @@ th:hover{color:var(--t1)}th.srt{color:var(--accent)}tr:hover td{background:var(-
 <th onclick=sort(6) style=color:#60a5fa>趋势30%</th><th onclick=sort(7) style=color:#34d399>位置15%</th>
 <th onclick=sort(8) style=color:#c084fc>结构10%</th><th onclick=sort(9) style=color:#fbbf24>动量25%</th>
 <th onclick=sort(10) style=color:#f87171>大单15%</th><th onclick=sort(11) style=color:#38bdf8>融资10%</th>
-<th onclick=sort(12)>量比</th><th>操作建议</th>
+<th onclick=sort(12)>量比</th><th style=color:#f97316>盘中信号</th><th>操作建议</th>
 </tr></thead><tbody id=tb></tbody></table></div>
 <div class=pg id=pg></div>
 </div>
@@ -207,7 +207,7 @@ try{
 const r=await apiFetch(A+'/api/v2/watch-pool/score-list?page='+(p||1)+'&page_size=310&keyword='+encodeURIComponent(q));
 const d=await r.json();const dd=d.data||{};D=dd.stocks||[];const DT=dd.total||0;
 document.getElementById('topDate').textContent='共'+DT+'只 | 引擎: V2动量轨道';
-}catch(e){document.getElementById('tb').innerHTML='<tr><td colspan=13 style=text-align:center;color:var(--t3);padding:30px>加载失败</td></tr>';return}
+}catch(e){document.getElementById('tb').innerHTML='<tr><td colspan=14 style=text-align:center;color:var(--t3);padding:30px>加载失败</td></tr>';return}
 
 // 信号过滤
 let arr=[...D];const sfv=document.getElementById('sf').value;
@@ -261,8 +261,9 @@ return '<tr>'+
 '<td style=color:'+(mfs>=60?'#f87171':'var(--t3)')+'>'+mfs.toFixed(0)+'</td>'+
 '<td style=color:'+(mgs>=60?'#38bdf8':'var(--t3)')+'>'+mgs.toFixed(0)+'</td>'+
 '<td style=color:'+vrColor+'>'+vr.toFixed(2)+'</td>'+
+'<td><span class="sb '+(s.intraday_signal&&(s.intraday_signal.includes('买')||s.intraday_signal.includes('强'))?'sb1':s.intraday_signal&&(s.intraday_signal.includes('卖')||s.intraday_signal.includes('逃')||s.intraday_signal.includes('空'))?'sb5':'sb4')+'" style=font-size:.7em>'+(s.intraday_signal||'—')+'</span></td>'+
 '<td><span class="sb '+actClass+'" style=font-size:.7em>'+act+'</span></td>'+
-'</tr>'}).join('')||'<tr><td colspan=14 style=text-align:center;color:var(--t3);padding:30px>暂无数据</td></tr>';
+'</tr>'}).join('')||'<tr><td colspan=18 style=text-align:center;color:var(--t3);padding:30px>暂无数据</td></tr>';
 
 // 分页
 let ph='';const ms=Math.min(tp,8);
@@ -275,7 +276,7 @@ function sort(c){if(DI===c)DS=DS==='asc'?'desc':'asc';else{DI=c;DS='desc'}load(1
 
 async function refreshScore(){
 document.getElementById('q').disabled=true;
-document.getElementById('tb').innerHTML='<tr><td colspan=13 style=text-align:center;padding:30px><div class=spinner></div><div style=color:var(--t3);margin-top:8px>正在用V2新引擎评分...</div></td></tr>';
+document.getElementById('tb').innerHTML='<tr><td colspan=18 style=text-align:center;padding:30px><div class=spinner></div><div style=color:var(--t3);margin-top:8px>正在用V2新引擎评分...</div></td></tr>';
 try{
 const r=await apiFetch(A+'/api/v2/refresh-score',{method:'POST',headers:{'X-API-Key':'90a275cbcc004fd5'}});
 const d=await r.json();

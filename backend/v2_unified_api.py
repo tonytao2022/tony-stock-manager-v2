@@ -14,7 +14,29 @@ app.config['JSON_AS_ASCII'] = False
 
 # ====== API Key 认证 ======
 API_KEY = os.environ.get('V2_API_KEY', '90a275cbcc004fd5')
-WHITELIST = ['/api/v2/health', '/api/v2/system/health']
+# GET-only read endpoints that don't require API Key auth
+READ_WHITELIST = [
+    '/api/v2/health',
+    '/api/v2/system/health',
+    '/api/v2/watch-pool/score-list',
+    '/api/v2/watch-pool/list',
+    '/api/v2/dashboard',
+    '/api/v2/strategy/signals',
+    '/api/v2/strategy/config',
+    '/api/v2/holdings',
+    '/api/v2/holdings/calc',
+    '/api/v2/backtest/pool',
+    '/api/v2/backtest/history',
+    '/api/v2/sector/top',
+    '/api/v2/sector/rotation',
+    '/api/v2/system/config',
+    '/api/v2/system/data-dictionary',
+    '/api/v2/system/api-keys',
+    '/api/v2/system/cron-status',
+    '/api/v2/system/db-tables',
+    '/api/v2/refresh-score',
+    '/api/v2/short-term/evaluate',
+]
 
 def ok(d):
     return jsonify({"code": 0, "data": d, "message": "success"})
@@ -26,7 +48,11 @@ def check_api_key():
     if request.method == 'OPTIONS':
         return
     path = request.path.rstrip('/')
-    if path in WHITELIST or any(path.startswith(w) for w in WHITELIST):
+    # 只读 GET 接口放行（带路径前缀匹配）
+    if request.method == 'GET' and any(path.startswith(w) for w in READ_WHITELIST):
+        return
+    # POST 白名单需精确匹配
+    if path in READ_WHITELIST:
         return
     key = request.headers.get('X-API-Key') or request.args.get('api_key')
     if key != API_KEY:
@@ -154,7 +180,7 @@ def holdings():
         return add_holding()
     c = conn(); cu = c.cursor()
     st = request.args.get('status', '')
-    sql = "SELECT ph.*, ss.composite_score as score, ss.signal_label, dk.close as current_price, dk.change_pct FROM portfolio_holdings ph LEFT JOIN strategy_signal ss ON ph.ts_code=ss.ts_code AND ss.trade_date=(SELECT MAX(trade_date) FROM strategy_signal) LEFT JOIN daily_kline_qfq dk ON ph.ts_code=dk.ts_code AND dk.trade_date=(SELECT MAX(trade_date) FROM daily_kline_qfq)"
+    sql = "SELECT ph.*, ss.composite_score as score, ss.signal_label, dk.close as current_price, dk.change_pct FROM portfolio_holdings ph LEFT JOIN strategy_signal ss ON ph.ts_code=ss.ts_code AND ss.trade_date=(SELECT MAX(trade_date) FROM strategy_signal) LEFT JOIN daily_kline dk ON ph.ts_code=dk.ts_code AND dk.trade_date=(SELECT MAX(trade_date) FROM daily_kline)"
     if st:
         sql += " WHERE ph.status='" + st + "'"
     sql += " ORDER BY ph.created_at DESC"
@@ -523,7 +549,7 @@ def watch_pool_score():
         FROM watch_pool wp
         LEFT JOIN stock_basic sb ON wp.ts_code = sb.ts_code
         LEFT JOIN strategy_signal ss ON wp.ts_code = ss.ts_code AND ss.trade_date = %s
-        LEFT JOIN daily_kline_qfq dk ON wp.ts_code = dk.ts_code AND dk.trade_date = %s
+        LEFT JOIN daily_kline dk ON wp.ts_code = dk.ts_code AND dk.trade_date = %s
         LEFT JOIN intraday_signals its ON wp.ts_code = its.ts_code AND its.trade_date = %s AND its.check_time = (SELECT MAX(check_time) FROM intraday_signals WHERE ts_code=wp.ts_code AND trade_date=%s)
         WHERE wp.is_active=1
     """
