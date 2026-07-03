@@ -818,7 +818,7 @@ class SeasonJudge:
                 score -= 5
                 details.append(f'MA20之上占比{pct:.0%}(熊市)')
 
-        if mkt_data and 'new_high_low_ratio' in mkt_data:
+        if mkt_data and mkt_data.get('new_high_low_ratio') is not None:
             ratio = mkt_data['new_high_low_ratio']
             if ratio > 3:
                 score += 3
@@ -1060,22 +1060,79 @@ class MarketBreadthCalculator:
         return new_highs / new_lows
 
     def get_breadth_for_date(self, loader: DataLoader, target_date: date) -> Dict:
-        """获取指定日期的市场宽度数据"""
-        codes = loader.get_stock_pool_codes()
-        if not codes:
-            return {}
-
-        stock_data = loader.load_stock_kline_history(codes)
+        """获取指定日期的市场宽度数据（SQL直接计算，避免全量拉到内存）"""
+        import pymysql
+        conn = pymysql.connect(**self.db_config)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
 
         result = {}
-        pct = self.compute_above_ma20_pct(stock_data, target_date)
-        if pct is not None:
-            result['pct_above_ma20'] = round(pct, 4)
 
-        ratio = self.compute_new_high_low_ratio(stock_data, target_date)
-        if ratio is not None:
-            result['new_high_low_ratio'] = round(ratio, 2)
+        # ── MA20占比：用daily_kline + 子查询算20日均价 ──
+        td = target_date.isoformat() if hasattr(target_date, 'isoformat') else str(target_date)
+        # 每天只拉1条IN子查询比group by后join快（避免全表扫描）
+        # 先用 backtest_pool 限定范围
+        # 用独立SELECT表达式（MySQL相关子查询别名最稳健的写法）
+        cur.execute("""
+            SELECT
+              (SELECT COUNT(*) FROM daily_kline
+               WHERE trade_date=%s AND is_valid=1
+                 AND ts_code IN (SELECT ts_code FROM backtest_pool WHERE status='ACTIVE')
+              ) as total,
+              (SELECT COUNT(*) FROM daily_kline d1
+               WHERE d1.trade_date=%s AND d1.is_valid=1
+                 AND d1.ts_code IN (SELECT ts_code FROM backtest_pool WHERE status='ACTIVE')
+                 AND d1.close > (SELECT AVG(t.close) FROM daily_kline t
+                                 WHERE t.ts_code=d1.ts_code
+                                   AND t.trade_date<=%s
+                                   AND t.trade_date>=DATE_SUB(%s, INTERVAL 20 DAY)
+                                   AND t.is_valid=1)
+              ) as above
+        """, (td, td, td, td))
+        row = cur.fetchone()
+        if row and row['total'] and row['total'] > 0:
+            result['pct_above_ma20'] = round((row['above'] or 0) / row['total'], 4)
+        else:
+            result['pct_above_ma20'] = None
 
+        # ── 新高新低比 ──
+        cur.execute("""
+            SELECT
+              (SELECT COUNT(*) FROM daily_kline d1
+               WHERE d1.trade_date=%s AND d1.is_valid=1
+                 AND d1.ts_code IN (SELECT ts_code FROM backtest_pool WHERE status='ACTIVE')
+                 AND d1.close >= (SELECT MAX(t.close) FROM daily_kline t
+                                  WHERE t.ts_code=d1.ts_code
+                                    AND t.trade_date<=%s
+                                    AND t.trade_date>=DATE_SUB(%s, INTERVAL 20 DAY)
+                                 ) * 0.98
+              ) as new_highs,
+              (SELECT COUNT(*) FROM daily_kline d1
+               WHERE d1.trade_date=%s AND d1.is_valid=1
+                 AND d1.ts_code IN (SELECT ts_code FROM backtest_pool WHERE status='ACTIVE')
+                 AND d1.close <= (SELECT MIN(t.close) FROM daily_kline t
+                                  WHERE t.ts_code=d1.ts_code
+                                    AND t.trade_date<=%s
+                                    AND t.trade_date>=DATE_SUB(%s, INTERVAL 20 DAY)
+                                 ) * 1.02
+              ) as new_lows
+        """, (td, td, td, td, td, td))
+        row2 = cur.fetchone()
+        if row2:
+            nh = row2['new_highs'] or 0
+            nl = row2['new_lows'] or 0
+            result['new_high_low_ratio'] = round(nh / nl, 2) if nl > 0 else (5.0 if nh > 0 else 1.0)
+        else:
+            result['new_high_low_ratio'] = None
+        row2 = cur.fetchone()
+        if row2:
+            nh = row2['new_highs'] or 0
+            nl = row2['new_lows'] or 0
+            result['new_high_low_ratio'] = round(nh / nl, 2) if nl > 0 else (5.0 if nh > 0 else 1.0)
+        else:
+            result['new_high_low_ratio'] = None
+
+        cur.close()
+        conn.close()
         return result
 
 
