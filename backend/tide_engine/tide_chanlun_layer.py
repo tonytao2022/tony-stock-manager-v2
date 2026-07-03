@@ -59,7 +59,7 @@ def detect_divergence(ts_code: str, trade_date: str) -> bool:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT trade_date, close FROM daily_kline
+            SELECT trade_date, close, high, low FROM daily_kline
             WHERE ts_code=%s AND trade_date <= %s AND is_valid=1
             ORDER BY trade_date DESC LIMIT 60
         """, (ts_code, trade_date))
@@ -68,14 +68,16 @@ def detect_divergence(ts_code: str, trade_date: str) -> bool:
         if len(rows) < 40:
             return False
         closes = [float(r['close']) for r in rows]
+        highs = [float(r['high']) for r in rows]
+        lows = [float(r['low']) for r in rows]
         # 近20日close是否接近60日新高
         max_60 = max(closes)
         max_20 = max(closes[:20])
         if max_20 < max_60 * 0.95:  # 没创新高
             return False
-        # 简化RSI背离：当前RSI(14) < 前高点RSI(14)
+        # === 条件1: RSI顶背离（收紧版）===
         gains, losses = [], []
-        for i in range(13, -1, -1):  # 最近14条
+        for i in range(13, -1, -1):
             change = closes[i-1] - closes[i] if i > 0 else 0
             if change > 0: gains.append(change); losses.append(0)
             else: gains.append(0); losses.append(-change)
@@ -85,11 +87,37 @@ def detect_divergence(ts_code: str, trade_date: str) -> bool:
             avg_l = sum(losses) / 14
             if avg_l == 0: current_rsi = 100
             else: rs = avg_g / avg_l; current_rsi = 100 - 100 / (1 + rs)
-        # 前高点权重索引
-        peak_idx = closes[:20].index(max_20)
-        peak_pos = len(closes) - peak_idx  # 绝对位置
-        # 如果当前RSI < 前高点附近RSI，是背离
-        return current_rsi < 60  # 简化版：RSI<60表示动能不够强
+        # === 条件2: MACD柱状图正在缩量（柱状图三日连续缩小）===
+        # 简化EMA12/26计算
+        ema12, ema26 = None, None
+        # 用60条数据计算MACD
+        def _ema(values, period):
+            if len(values) < period: return None
+            k = 2 / (period + 1)
+            ema = float(values[0])
+            for v in values[1:]:
+                ema = v * k + ema * (1 - k)
+            return ema
+        # 计算最近4日的MACD柱
+        macd_bars = []
+        for offset in range(3, -1, -1):  # offset 3=四日前...0=当日
+            segment = closes[offset:offset+60] if offset+60 <= len(closes) else closes[offset:]
+            if len(segment) < 26:
+                macd_bars.append(0)
+                continue
+            e12 = _ema(segment, 12)
+            e26 = _ema(segment, 26)
+            if e12 is None or e26 is None:
+                macd_bars.append(0)
+                continue
+            dif = e12 - e26
+            dea_seg = segment[:9] if len(segment) >= 9 else segment
+            dea = _ema(dea_seg, 9) if len(dea_seg) >= 9 else 0
+            if dea is None: dea = 0
+            macd_bars.append((dif - dea) * 2)
+        macd_decaying = len(macd_bars) >= 3 and macd_bars[-1] < macd_bars[-2] < macd_bars[-3]
+        # 条件：MACD柱状图持续缩量
+        return macd_decaying
     except:
         return False
 
