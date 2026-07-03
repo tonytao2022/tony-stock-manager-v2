@@ -177,7 +177,7 @@ def apply_chanlun_layer(ts_code: str, trade_date: str, factor_scores: Dict[str, 
          'signals': {'central':bool, 'divergence':bool, 'third_buy':bool}}
     """
     adj = {'f1': 1.0, 'f2': 1.0, 'f3': 1.0, 'f4': 1.0,
-           'f5': 1.0, 'f6': 1.0, 'f7': 1.0}
+           'f5': 1.0, 'f6': 1.0}
     signals = {'central': False, 'divergence': False, 'third_buy': False}
     bonus = 0.0
 

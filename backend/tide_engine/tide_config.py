@@ -13,8 +13,8 @@ if _backend_dir not in sys.path:
 from db_config import get_connection
 
 _DEFAULT_WEIGHTS = {
-    'f1': 0.10, 'f2': 0.15, 'f3': 0.15,
-    'f4': 0.25, 'f5': 0.15, 'f6': 0.12, 'f7': 0.08,
+    'f1': 0.10, 'f3': 0.15, 'f4': 0.48,
+    'f5': 0.15, 'f6': 0.12,
 }
 
 

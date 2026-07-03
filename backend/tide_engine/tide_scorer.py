@@ -30,22 +30,18 @@ def _get_watch_pool() -> List[str]:
 
 
 def _compute_factors(ts_code: str, trade_date: str) -> Dict:
-    """计算7个因子"""
+    """计算5因子（合并F2/F4为回摆势能）"""
     from tide_engine.tide_factor_f1 import compute as f1
-    from tide_engine.tide_factor_f2 import compute as f2
     from tide_engine.tide_factor_f3 import compute as f3
-    from tide_engine.tide_factor_f4 import compute as f4
+    from tide_engine.tide_factor_f4 import compute as f4  # 回摆势能(合并原F2+F4+F7)
     from tide_engine.tide_factor_f5 import compute as f5
     from tide_engine.tide_factor_f6 import compute as f6
-    from tide_engine.tide_factor_f7 import compute as f7
     return {
         'f1': f1(ts_code, trade_date),
-        'f2': f2(ts_code, trade_date),
         'f3': f3(ts_code, trade_date),
         'f4': f4(ts_code, trade_date),
         'f5': f5(ts_code, trade_date),
         'f6': f6(ts_code, trade_date),
-        'f7': f7(ts_code, trade_date),
     }
 
 
@@ -74,7 +70,7 @@ def _get_season(trade_date: str) -> str:
 
 def _l3_score(factors: Dict, weights: Dict) -> float:
     """计算L3加权分"""
-    score = sum(factors.get(f'f{i}', 0) * weights.get(f'f{i}', 0) for i in range(1, 8))
+    score = sum(factors.get(f'f{i}', 0) * weights.get(f'f{i}', 0) for i in [1, 3, 4, 5, 6])
     # 映射到[0, 100]
     mapped = (score + 5) / 10 * 100
     mapped = max(0, min(100, mapped))
@@ -91,12 +87,12 @@ def _save_factor_value(trade_date: str, ts_code: str, factors: Dict, l3: float):
              f5_score, f6_score, f7_score, l3_score)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
-            f1_score=VALUES(f1_score), f2_score=VALUES(f2_score),
+            f1_score=VALUES(f1_score), f2_score=0,
             f3_score=VALUES(f3_score), f4_score=VALUES(f4_score),
             f5_score=VALUES(f5_score), f6_score=VALUES(f6_score),
-            f7_score=VALUES(f7_score), l3_score=VALUES(l3_score)
-    """, (trade_date, ts_code, factors['f1'], factors['f2'], factors['f3'],
-          factors['f4'], factors['f5'], factors['f6'], factors['f7'], l3))
+            f7_score=0, l3_score=VALUES(l3_score)
+    """, (trade_date, ts_code, factors['f1'], 0, factors['f3'],
+          factors['f4'], factors['f5'], factors['f6'], 0, l3))
     conn.commit()
     cur.close(); conn.close()
 
