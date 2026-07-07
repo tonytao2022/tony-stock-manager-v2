@@ -2,6 +2,7 @@
 """
 收盘数据拉取管道 — 独立脚本，供cron调用
 拉取: daily_kline + daily_basic + moneyflow + 指数K线
+只拉监控池股票（watch_pool），不拉全市场
 """
 import sys, tushare as ts
 from datetime import datetime
@@ -17,16 +18,37 @@ today_fmt = datetime.now().strftime('%Y-%m-%d')
 def log(msg):
     print(f"  {msg}", flush=True)
 
-# ─── Step 1: 全市场日K线 (daily_basic) ───
-print("[1/5] daily 全市场K线...", flush=True)
+def get_pool_codes(cursor) -> list:
+    """获取监控池活跃股票代码列表"""
+    cursor.execute("SELECT ts_code FROM watch_pool WHERE is_active=1")
+    return [r['ts_code'] for r in cursor.fetchall()]
 
-df = pro.daily(trade_date=today)
-log(f"拉取 {len(df)}条")
+def batch_query(api_func, codes, **kwargs):
+    """分批查询，每批100只（Tushare支持逗号分隔）"""
+    all_rows = []
+    for i in range(0, len(codes), 100):
+        batch = codes[i:i+100]
+        codes_str = ','.join(batch)
+        try:
+            df = api_func(ts_code=codes_str, **kwargs)
+            if df is not None and not df.empty:
+                all_rows.extend(df.to_dict('records'))
+        except Exception as e:
+            log(f"  分批{i}失败: {str(e)[:50]}")
+    return all_rows
 
 c = conn.cursor()
+pool_codes = get_pool_codes(c)
+log(f"监控池共{len(pool_codes)}只股票")
+
+# ─── Step 1: 监控池日K线 ───
+print("[1/5] daily 监控池K线...", flush=True)
+
+rows = batch_query(pro.daily, pool_codes, trade_date=today)
+log(f"拉取 {len(rows)}条")
 
 saved = 0
-for _, r in df.iterrows():
+for r in rows:
     try:
         c.execute("""INSERT INTO daily_kline (ts_code,trade_date,open,high,low,close,pre_close,change_pct,vol,amount)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -41,14 +63,14 @@ for _, r in df.iterrows():
     except: pass
 log(f"✅ K线入库 {saved}条")
 
-# ─── Step 1.5: daily_basic 基本面指标 ───
+# ─── Step 1.5: daily_basic 基本面指标（监控池） ───
 print("[1.5/5] daily_basic (PE/PB/换手率/市值)...", flush=True)
 
-df_basic = pro.daily_basic(trade_date=today)
-log(f"拉取 {len(df_basic)}条")
+rows_basic = batch_query(pro.daily_basic, pool_codes, trade_date=today)
+log(f"拉取 {len(rows_basic)}条")
 
 saved_basic = 0
-for _, r in df_basic.iterrows():
+for r in rows_basic:
     try:
         c.execute("""INSERT INTO daily_basic
             (ts_code, trade_date, turnover_rate, turnover_rate_f,
@@ -79,12 +101,12 @@ for _, r in df_basic.iterrows():
         pass
 log(f"✅ daily_basic入库 {saved_basic}条")
 
-# ─── Step 2: moneyflow ───
+# ─── Step 2: moneyflow（监控池） ───
 print("[2/5] moneyflow...", flush=True)
-df2 = pro.moneyflow(trade_date=today)
-log(f"拉取 {len(df2)}条")
+rows2 = batch_query(pro.moneyflow, pool_codes, trade_date=today)
+log(f"拉取 {len(rows2)}条")
 saved2 = 0
-for _, r in df2.iterrows():
+for r in rows2:
     try:
         c.execute("""INSERT INTO moneyflow (ts_code,trade_date,net_mf_amount,buy_lg_amount,sell_lg_amount,buy_sm_amount,sell_sm_amount)
             VALUES (%s,%s,%s,%s,%s,%s,%s)
