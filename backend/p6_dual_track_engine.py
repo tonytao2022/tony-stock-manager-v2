@@ -449,8 +449,8 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
         details['chanlun_row'] = bool(cl_row)
         details['vol_ratio'] = _calc_vol_ratio(ts_code, ctx.trade_date)
 
-        # ─── 价格下跌惩罚 V3 (2026-07-17 V3, 降低力度) ───
-        # V2惩罚过猛（全市场评分均值被压到25），V3降低上限50%
+        # ─── 价格下跌惩罚 V13.3b (2026-07-18, 回测最优版) ───
+        # 对齐backtest_v133_fast.py的V13.3b规则：回测验证总收益+33.36%/卡玛3.20x
         penalty_score = 0.0
         penalty_reason = []
 
@@ -469,12 +469,11 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
             if ma5 <= 0 and len(closes) >= 5:
                 ma5 = sum(closes[-5:]) / 5
 
-            # ─── 趋势分价格验证 ───
-            # 如果价格跌到MA20以下，trend_score打8折
+            # ─── 破MA20 → 趋势分打折 ───
             if ma20 > 0 and close_price < ma20:
                 below_ma20 = (ma20 - close_price) / ma20
                 original_trend = trend_score
-                discount = max(0.5, 1.0 - below_ma20 * 0.4)  # V3: 从0.4→0.5, 0.6→0.4 更温和
+                discount = max(0.4, 1.0 - below_ma20 * 0.6)  # V13.3b: 打折更狠
                 trend_score = int(original_trend * discount)
                 if trend_score != original_trend:
                     tloss = (original_trend - trend_score) * 0.30
@@ -482,29 +481,29 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
                     penalty_reason.append(f'破MA20(t{original_trend}→{trend_score})')
                     details['trend_orig'] = original_trend
 
-            # ─── 空头排列检查 ───
+            # ─── 空头排列检查（V13.3b: +8分）───
             if ma5 > 0 and ma20 > 0 and close_price < ma5 and ma5 < ma20:
-                penalty_score += 5  # V3: 8→5
-                penalty_reason.append('空头排列+5')
+                penalty_score += 8
+                penalty_reason.append('空头排列+8')
 
-            # ─── 跌幅惩罚（比例挂钩，降上限50%） ───
-            if r5 < -0.08:  # V3: 从5%收紧到8%
-                p = min(12, int(abs(r5) * 120))  # V3: min(25,180)→min(12,120)
+            # ─── 跌幅惩罚（V13.3b: 阈值更宽, 上限更高）───
+            if r5 < -0.05:  # 5日跌超5%
+                p = min(25, int(abs(r5) * 180))
                 penalty_score += p
                 penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
-            if r10 < -0.12:  # V3: 从8%收紧到12%
-                p = min(10, int(abs(r10) * 80))  # V3: min(20,120)→min(10,80)
+            if r10 < -0.08:  # 10日跌超8%
+                p = min(20, int(abs(r10) * 120))
                 penalty_score += p
                 penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
-            if r20_ret < -0.15:  # V3: 从10%收紧到15%
-                p = min(12, int(abs(r20_ret) * 70))  # V3: min(25,100)→min(12,70)
+            if r20_ret < -0.10:  # 20日跌超10%
+                p = min(25, int(abs(r20_ret) * 100))
                 penalty_score += p
                 penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-{p}')
 
         details['penalty_score'] = round(penalty_score, 1)
         details['penalty_reason'] = ';'.join(penalty_reason) if penalty_reason else '无'
 
-        # 7. 综合
+        # 7. 综合（扣除惩罚分）
         final_score = (trend_score * 0.30 + pos_score * 0.10 + structure_score * 0.10 +
                        momentum * 0.25 + mf_score * 0.15 + margin_score * 0.10)
         final_score = max(0, min(100, round(final_score - penalty_score, 1)))
@@ -722,23 +721,43 @@ def track_reversion(ts_code: str, ctx: MarketContext) -> Dict:
         details['structure_score'] = structure  # B轨结构分直接从缠论获取
         details['margin_score'] = 50     # B轨暂不计算融资因子，默认中性
 
-        # ─── 价格下跌惩罚（同动量轨 V3，降力度） ───
+        # ─── 价格下跌惩罚（同动量轨 V13.3b，回测最优版） ───
         penalty_score = 0.0
         penalty_reason = []
         if n >= 20:
-            if r5d < -0.10:  # V3: 8%→10%
-                p = min(8, int(abs(r5d) * 80))  # V3: min(15,100)→min(8,80)
+            close_price = close
+            # 使用已有的closes数组计算ma5、ma20和涨跌幅
+            ma5_c = sum(closes[-5:]) / 5 if len(closes) >= 5 else 0
+            ma20_c = sum(closes[-20:]) / 20
+            r5 = (closes[-1] - closes[-6]) / closes[-6] if len(closes) >= 6 else 0
+            r10 = (closes[-1] - closes[-11]) / closes[-11] if len(closes) >= 11 else 0
+            r20 = (closes[-1] - closes[-21]) / closes[-21] if len(closes) >= 21 else 0
+            # 破MA20
+            if ma20_c > 0 and close_price < ma20_c:
+                below_ma20 = (ma20_c - close_price) / ma20_c
+                discount = max(0.4, 1.0 - below_ma20 * 0.6)
+                if discount < 1.0:
+                    tloss = 55 * (1 - discount) * 0.40
+                    if tloss > 2:
+                        penalty_score += round(tloss, 1)
+                        penalty_reason.append(f'破MA20-{round(tloss,1)}')
+            # 空头排列
+            if ma5_c > 0 and ma20_c > 0 and close_price < ma5_c and ma5_c < ma20_c:
+                penalty_score += 8
+                penalty_reason.append('空头排列+8')
+            # 跌幅惩罚
+            if r5 < -0.05:
+                p = min(25, int(abs(r5) * 180))
                 penalty_score += p
-                penalty_reason.append(f'5日跌{r5d*100:.0f}%-{p}分')
-            if r5d < -0.05 and r10d < -0.05:  # V3: 3%→5%
-                extra = min(5, int((abs(r5d) + abs(r10d)) * 30))  # V3: min(10,50)→min(5,30)
-                penalty_score += extra
-                penalty_reason.append(f'持续跌+{extra}分')
-            if ma20_val > 0 and close < ma20_val:
-                below_pct = (ma20_val - close) / ma20_val
-                p = min(5, int(below_pct * 40))  # V3: min(10,60)→min(5,40)
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
+            if r10 < -0.08:
+                p = min(20, int(abs(r10) * 120))
                 penalty_score += p
-                penalty_reason.append(f'破20日线-{p}分')
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
+            if r20 < -0.10:
+                p = min(25, int(abs(r20) * 100))
+                penalty_score += p
+                penalty_reason.append(f'20日跌{r20*100:.0f}%-{p}')
 
         details['penalty_score'] = round(penalty_score, 1)
         details['penalty_reason'] = ';'.join(penalty_reason) if penalty_reason else '无'
