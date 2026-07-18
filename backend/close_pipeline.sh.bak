@@ -1,21 +1,22 @@
 #!/bin/bash
 # ============================================
 # 收盘后全量数据拉取 + 技术指标 + 季节判定 + 评分管道
-# 交易日 16:00~17:00 自动执行（由crontab触发）
+# 交易日 16:00~17:00 自动执行(由crontab触发)
 # ============================================
-set -e
+# set -e 已移除(避免Tushare接口临时无数据导致全管道退出)
+# Token 从 db_config.py 的 get_tushare_token() 动态获取,不硬编码
 cd /root/stock-system-v2/backend
 
 LOG=/tmp/stock_pipeline_v2.log
 echo "[$(date '+%H:%M:%S')] 🚀 收盘管道启动" >> $LOG
 
-# [1/5] 基础数据：daily_basic + moneyflow + margin_detail + 指数日线
-# 由 close_pipeline.py 统一执行（margin_detail 自带T+1~T+2自等待逻辑）
-echo "[1/5] 拉取 daily_basic + moneyflow + margin_detail + 指数日线..." >> $LOG
+# [1/9] 基础数据:daily_basic + moneyflow + margin_detail + 指数日线
+# 由 close_pipeline.py 统一执行(margin_detail 自带T+1~T+2自等待逻辑)
+echo "[1/9] 拉取 daily_kline + daily_basic + moneyflow + margin_detail + 指数日线..." >> $LOG
 python3 close_pipeline.py >> $LOG 2>&1
 
-# [2/5] 技术指标计算
-echo "[2/5] 技术指标计算..." >> $LOG
+# [2/9] 技术指标计算
+echo "[2/9] 技术指标计算..." >> $LOG
 python3 -c "
 import sys; sys.path.insert(0,'.')
 from db_config import get_connection
@@ -39,13 +40,31 @@ if str(last_ti) >= td:
 else:
     from datetime import datetime
     td_fmt = datetime.strptime(td, '%Y-%m-%d').strftime('%Y%m%d')
-    df = pro.stk_factor(trade_date=td_fmt, fields='ts_code,trade_date,ma_5,ma_10,ma_20,ma_60,ma_120,ma_250,rsi_12,macd_dif,macd_dea,atr_14,boll_upper,boll_mid,boll_lower,volume_ratio')
-    print(f'  拉取{len(df)}条技术指标')
-
     saved = 0
-    for _, r in df.iterrows():
-        try:
-            c.execute('''INSERT INTO technical_indicator 
+    import signal
+    class TimeoutError(Exception): pass
+    def handler(signum, frame): raise TimeoutError('stk_factor超时')
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(120)  # 最多等120秒
+    try:
+        df = pro.stk_factor(trade_date=td_fmt, fields='ts_code,trade_date,ma_5,ma_10,ma_20,ma_60,ma_120,ma_250,rsi_12,macd_dif,macd_dea,atr_14,boll_upper,boll_mid,boll_lower,volume_ratio')
+        signal.alarm(0)
+        print(f'  拉取{len(df)}条技术指标')
+    except TimeoutError:
+        print('  ⚠️ stk_factor超时120s, 跳过技术指标')
+        saved = -1
+    except Exception as e:
+        signal.alarm(0)
+        print(f'  ⚠️ stk_factor失败: {str(e)[:60]}, 跳过')
+        saved = -1
+    
+    if saved < 0:
+        pass  # 已经超时/出错了
+    else:
+        saved = 0
+        for _, r in df.iterrows():
+            try:
+                c.execute('''INSERT INTO technical_indicator
                 (ts_code, trade_date, ma_5, ma_10, ma_20, ma_60, ma_120, ma_250,
                  rsi_12, macd_dif, macd_dea, atr_14, boll_upper, boll_mid, boll_lower,
                  volume_ratio)
@@ -66,16 +85,19 @@ else:
                  float(r.get('boll_upper',0)or 0), float(r.get('boll_mid',0)or 0),
                  float(r.get('boll_lower',0)or 0),
                  float(r.get('volume_ratio',1)or 1)))
-            saved += 1
-        except Exception as e:
-            pass
-    conn.commit()
-    print(f'  入库{saved}条 ✅')
+                saved += 1
+            except Exception as e:
+                pass
+    if saved >= 0:
+        conn.commit()
+        print(f'  入库{saved}条 ✅')
+    else:
+        print(f'  ⚠️ 技术指标跳过(已超时)')
 conn.close()
 " >> $LOG 2>&1
 
-# [3/5] 缠论分析
-echo "[3/5] 缠论结构分析(完整算法)..." >> $LOG
+# [3/9] 缠论分析
+echo "[3/9] 缠论结构分析(完整算法)..." >> $LOG
 python3 -c "
 import sys
 sys.path.insert(0,'.')
@@ -99,23 +121,23 @@ else:
     v2_c.execute('SELECT ts_code FROM watch_pool')
     codes = [r['ts_code'] for r in v2_c.fetchall()]
     print(f'  开始分析{len(codes)}只股票...')
-    
+
     from engine.chanlun_analyzer import analyze_chanlun
-    
+
     done = 0
     for code in codes:
         try:
-            v2_c.execute('''SELECT trade_date, open, high, low, close, vol FROM daily_kline 
+            v2_c.execute('''SELECT trade_date, open, high, low, close, vol FROM daily_kline
                 WHERE ts_code=%s ORDER BY trade_date ASC''', (code,))
             rows = v2_c.fetchall()
             if len(rows) < 60: continue
-            
-            ohlc = [{'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'vol':float(r['vol'])} for r in rows]
-            
+
+            ohlc = [{'trade_date':str(r['trade_date']),'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'vol':float(r['vol'])} for r in rows]
+
             result = analyze_chanlun(code, td, ohlc)
             if not result or 'error' in result: continue
-            
-            v2_c.execute('''INSERT INTO chanlun_structure 
+
+            v2_c.execute('''INSERT INTO chanlun_structure
                 (ts_code, trade_date, analysis_level,
                  top_fractal_cnt, bottom_fractal_cnt,
                  bi_direction, bi_strength,
@@ -159,8 +181,8 @@ else:
 v2_conn.close()
 " >> $LOG 2>&1
 
-# [4/5] 季节判定
-echo "[4/5] 季节判定..." >> $LOG
+# [4/9] 季节判定
+echo "[4/9] 季节判定..." >> $LOG
 python3 -c "
 import sys; sys.path.insert(0,'.')
 from season_engine import SeasonEngine, save_result_to_db
@@ -170,8 +192,8 @@ save_result_to_db(r)
 print(f'  结果: {r.get(\"market_season\")}/{r.get(\"market_regime\")} 评分:{r.get(\"raw_score\",0):.2f}')
 " >> $LOG 2>&1
 
-# [5/5] P6双轨评分 + 评分快照
-echo "[5/5] P6双轨评分..." >> $LOG
+# [5/9] P6双轨评分 + 评分快照
+echo "[5/9] P6双轨评分..." >> $LOG
 python3 score_pipeline.py >> $LOG 2>&1
 
 # 保存当日评分快照
@@ -224,13 +246,13 @@ print(f'  快照入库: {saved}条 ✅', flush=True)
 c.close(); conn.close()
 PYEOF
 
-# [6/7] 打板（涨停）数据刷新
-printf '  [6/7] 打板数据刷新...\n' >> $LOG
+# [6/9] 打板(涨停)数据刷新
+printf '  [6/9] 打板数据刷新...\n' >> $LOG
 cd "$(dirname "$0")"
 python3 scripts/refresh_dragon_data.py >> $LOG 2>&1
 
-# [7/8] 打板评分快照 — 从dragon API取当日涨停股完整评分写入快照表
-printf '  [7/8] 打板评分快照...\n' >> $LOG
+# [7/9] 打板评分快照 - 从dragon API取当日涨停股完整评分写入快照表
+printf '  [7/9] 打板评分快照...\n' >> $LOG
 cd "$(dirname "$0")"
 python3 -c "
 import sys, json, requests
@@ -242,7 +264,7 @@ try:
     data = r.json().get('data', {})
     rows = data.get('data', [])
     td = data.get('trade_date', '')
-    
+
     if not rows:
         print(f'  打板快照: 无涨停数据(交易日{td})', flush=True)
     else:
@@ -250,7 +272,7 @@ try:
         c = conn.cursor()
         saved = 0
         for s in rows:
-            c.execute('''INSERT INTO dragon_snapshot 
+            c.execute('''INSERT INTO dragon_snapshot
                 (trade_date, ts_code, name, change_pct, limit_up_time, reason,
                  dragon_score, action_level, action,
                  momentum, mf_score, trend, pos_score, margin_score,
@@ -280,8 +302,8 @@ except Exception as e:
     print(f'  ❌ 打板快照失败: {e}', flush=True)
 " >> $LOG 2>&1
 
-# [8/8] 板块数据聚合
-printf '  [8/8] 板块数据聚合...\n' >> $LOG
+# [8/9] 板块数据聚合
+printf '  [8/9] 板块数据聚合...\n' >> $LOG
 python3 << 'PYEOF2' >> $LOG 2>&1
 import sys; sys.path.insert(0, '.')
 from db_config import get_connection
@@ -323,5 +345,47 @@ conn.commit()
 print(f'  板块聚合完成: {saved}个行业 ✅', flush=True)
 c.close(); conn.close()
 PYEOF2
+
+# [9/9] 刷新持仓现价
+printf '  [9/9] 刷新持仓现价...\n' >> $LOG
+python3 << 'PYEOF3' >> $LOG 2>&1
+import sys; sys.path.insert(0, '.')
+from db_config import get_connection
+conn = get_connection()
+c = conn.cursor()
+
+c.execute("SELECT MAX(trade_date) FROM daily_kline")
+td = str(c.fetchone()['MAX(trade_date)'])
+
+c.execute("""SELECT p.id, p.ts_code, p.name, p.cost_price, p.shares FROM portfolio_holdings p
+    WHERE p.status='HOLDING' AND p.shares > 0""")
+holdings = c.fetchall()
+print(f'  刷新{len(holdings)}只持仓现价(最新交易日: {td})', flush=True)
+
+updated = 0
+for h in holdings:
+    c.execute("""SELECT `close` FROM daily_kline_qfq
+        WHERE ts_code=%s AND trade_date <= %s
+        ORDER BY trade_date DESC LIMIT 1""", (h['ts_code'], td))
+    r = c.fetchone()
+    if not r:
+        continue
+    close = float(r['close'])
+    shares = float(h['shares'])
+    cost_price = float(h['cost_price'])
+    c.execute("""UPDATE portfolio_holdings SET
+        current_price=%s,
+        market_value=ROUND(%s * %s, 2),
+        profit_amount=ROUND(%s * %s - %s * %s, 2),
+        profit_pct=ROUND((%s - %s) / %s * 100, 3),
+        updated_at=NOW()
+        WHERE id=%s""",
+        (close, close, shares, close, shares, cost_price, shares, close, cost_price, cost_price, h['id']))
+    updated += 1
+
+conn.commit()
+c.close(); conn.close()
+print(f'  持仓现价刷新完成: {updated}只 ✅', flush=True)
+PYEOF3
 
 echo "[$(date '+%H:%M:%S')] ✅ 收盘管道完成" >> $LOG

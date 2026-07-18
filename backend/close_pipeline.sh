@@ -4,6 +4,7 @@
 # 交易日 16:00~17:00 自动执行(由crontab触发)
 # ============================================
 # set -e 已移除(避免Tushare接口临时无数据导致全管道退出)
+source /root/stock-system-v2/backend/.env 2>/dev/null || echo "⚠️ 跳过 .env"
 # Token 从 db_config.py 的 get_tushare_token() 动态获取,不硬编码
 cd /root/stock-system-v2/backend
 
@@ -387,5 +388,42 @@ conn.commit()
 c.close(); conn.close()
 print(f'  持仓现价刷新完成: {updated}只 ✅', flush=True)
 PYEOF3
+
+# [10/9] 刷新监控池快照 (watch_pool_snapshot)
+printf '  [10/9] 监控池快照刷新...\n' >> $LOG
+python3 << 'PYEOF10' >> $LOG 2>&1
+import sys; sys.path.insert(0, '.')
+from db_config import get_connection
+conn = get_connection()
+c = conn.cursor()
+
+c.execute("SELECT MAX(trade_date) as d FROM strategy_signal")
+td = str(c.fetchone()['d'])
+print(f'  快照日期: {td}', flush=True)
+
+c.execute("""REPLACE INTO watch_pool_snapshot
+    (ts_code, trade_date, v_score, raw_score, trend_score,
+     momentum_score, signal_type, signal_label, season, regime,
+     name, industry, close_price, change_pct, position_pct,
+     ret_5d, ret_10d, ret_20d)
+    SELECT
+        ss.ts_code, ss.trade_date,
+        ss.composite_score, ss.raw_score, ss.trend_score,
+        ss.momentum_score,
+        ss.signal_type, ss.signal_label, ss.season, ss.regime,
+        COALESCE(sb.name, ''),
+        COALESCE(sb.industry, ''),
+        0, 0, ss.position_pct,
+        0, 0, 0
+    FROM strategy_signal ss
+    LEFT JOIN stock_basic sb ON ss.ts_code = sb.ts_code
+    WHERE ss.trade_date=%s
+      AND ss.ts_code IN (SELECT ts_code FROM watch_pool WHERE is_active=1)""", (td,))
+
+cnt = c.rowcount
+conn.commit()
+c.close(); conn.close()
+print(f'  监控池快照: {cnt}条已刷新 ({td}) ✅', flush=True)
+PYEOF10
 
 echo "[$(date '+%H:%M:%S')] ✅ 收盘管道完成" >> $LOG

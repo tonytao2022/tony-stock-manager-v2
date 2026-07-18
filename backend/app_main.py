@@ -28,6 +28,7 @@ from routes.trade import trade_bp
 from routes.dragon import dragon_bp
 from routes.legacy import legacy_bp
 from routes.ai_analysis import ai_bp
+from routes.risk import risk_bp
 
 
 def create_app():
@@ -106,6 +107,7 @@ def create_app():
     app.register_blueprint(dragon_bp, url_prefix='/api/v2')
     app.register_blueprint(legacy_bp, url_prefix='/api/v2')
     app.register_blueprint(ai_bp, url_prefix='/api/v2')
+    app.register_blueprint(risk_bp, url_prefix='/api/v2')
 
     # ─── API列表（ToolRegistry） ────────────────────────────
     @app.route('/api/v2/system/tools', methods=['GET'])

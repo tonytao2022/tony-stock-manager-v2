@@ -6,7 +6,7 @@ import pymysql
 
 def conn():
     p = re.search(r'password\s*=\s*(\S+)', open('/etc/mysql/debian.cnf').read()).group(1)
-    return pymysql.connect(host='127.0.0.1', port=3306, user='debian-sys-maint',
+    return pymysql.connect(host="127.0.0.1", port=3306, user="debian-sys-maint",
                            password=p, database="stock_db_v2", charset="utf8mb4")
 
 app = Flask(__name__)
@@ -40,6 +40,8 @@ READ_WHITELIST = [
     '/api/v2/system/db-tables',
     '/api/v2/refresh-score',
     '/api/v2/short-term/evaluate',
+    '/api/v2/score-signal',
+    '/api/v2/portfolio-risk',
 ]
 
 def ok(d):
@@ -169,10 +171,84 @@ def checkpoints():
         })
     return ok({'count': len(cps), 'checkpoints': cps})
 
-@app.route('/api/v2/strategy/config')
+@app.route('/api/v2/strategy/config', methods=['GET', 'PUT'])
 def sconfig():
+    if request.method == 'PUT':
+        # 批量保存季节参数
+        try:
+            data = request.get_json()
+            if not data:
+                return err('缺少请求数据')
+            
+            # 兼容旧格式
+            if 'config_key' in data:
+                c = conn(); cu = c.cursor()
+                cu.execute("UPDATE strategy_config SET config_value=%s WHERE config_key=%s",
+                           [data['config_value'], data['config_key']])
+                c.commit(); cu.close(); c.close()
+                return ok({'config_key': data['config_key']}, '更新成功')
+            
+            items = data.get('items', [])
+            if not items:
+                return err('items 为空')
+            
+            affected = []
+            c = conn(); cu = c.cursor()
+            for item in items:
+                cid = item.get('id')
+                if not cid: continue
+                sql_parts = []
+                params = []
+                for field in ['buy_min_score', 'max_pos_pct', 'max_total_pct', 'stop_loss_pct',
+                              'max_hold_days', 'cool_days', 'trailing_stop_pct', 'p1_score',
+                              'p2_score', 'p3_score', 'position_tolerance']:
+                    if field in item and item[field] is not None:
+                        sql_parts.append(f'{field}=%s')
+                        params.append(item[field])
+                if sql_parts:
+                    params.append(cid)
+                    cu.execute(f"UPDATE strategy_config SET {', '.join(sql_parts)}, updated_at=NOW() WHERE id=%s", params)
+                    affected.append(item.get('season_type', str(cid)))
+            c.commit()
+            
+            # 自动创建版本快照
+            try:
+                cu.execute("SELECT MAX(version) as mv FROM strategy_config_versions")
+                row = cu.fetchone()
+                next_ver = (row['mv'] or 0) + 1
+                cu.execute("SELECT * FROM strategy_config WHERE is_active=1 ORDER BY id")
+                configs = cu.fetchall()
+                for cfg in configs:
+                    snap = json.dumps({
+                        'id': cfg['id'], 'name': cfg['name'],
+                        'buy_min_score': cfg['buy_min_score'],
+                        'max_pos_pct': cfg['max_pos_pct'],
+                        'max_total_pct': cfg['max_total_pct'],
+                        'stop_loss': float(cfg['stop_loss_pct']) if cfg['stop_loss_pct'] else 0,
+                        'max_hold': cfg['max_hold_days'],
+                        'cool_days': cfg['cool_days'],
+                        'trailing_stop': float(cfg['trailing_stop_pct']) if cfg['trailing_stop_pct'] else 0,
+                        'p1': cfg['p1_score'], 'p2': cfg['p2_score'], 'p3': cfg['p3_score'],
+                        'season_type': cfg['season_type'],
+                        'max_total_pct': cfg['max_total_pct'],
+                        'position_tolerance': cfg['position_tolerance'],
+                    })
+                    cu.execute("""INSERT INTO strategy_config_versions
+                        (version, version_name, config_id, snapshot, change_desc, created_by)
+                        VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (next_ver, f'V{next_ver}', cfg['id'], snap,
+                         f"批量更新: {', '.join(affected[:5])}" + ('...' if len(affected) > 5 else ''), 'web'))
+                c.commit()
+            except Exception as snap_err:
+                print(f"快照失败: {snap_err}")
+            
+            cu.close(); c.close()
+            return ok({'updated': len(affected), 'seasons': affected})
+        except Exception as e:
+            return err(str(e))
+    
+    # GET 返回季节参数矩阵
     c = conn(); cu = c.cursor()
-    # 只返回V13有效配置（id>=16），并包在items下供前端使用
     cu.execute("SELECT id, name, season_type, buy_min_score, max_pos_pct, max_total_pct, position_tolerance, stop_loss_pct, trailing_stop_pct, cool_days, max_hold_days, p1_score, p2_score, p3_score, description FROM strategy_config WHERE id>=16 ORDER BY id")
     cols = [d[0] for d in cu.description]
     cfg = [dict(zip(cols, r)) for r in cu.fetchall()]
@@ -426,7 +502,7 @@ def api_keys():
             return ok({"keys": [], "error": "无法读取数据库密码"})
         import pymysql as _pm2
         _c2 = _pm2.connect(host='127.0.0.1', port=3306, user='debian-sys-maint',
-                           password=_pwd2, charset="utf8mb4",
+                           password=_pwd2, charset="utf8mb4", init_command="SET NAMES utf8mb4",
                            database='openclaw_config')
         _cu2 = _c2.cursor()
         _cu2.execute("SELECT id, api_key, name, description, is_active FROM api_credentials ORDER BY id")
@@ -460,7 +536,7 @@ def api_key_detail(key_id):
             return ok({"api_key": None, "error": "无法读取数据库密码"})
         import pymysql as _pm2
         _c2 = _pm2.connect(host='127.0.0.1', port=3306, user='debian-sys-maint',
-                           password=_pwd2, charset="utf8mb4",
+                           password=_pwd2, charset="utf8mb4", init_command="SET NAMES utf8mb4",
                            database='openclaw_config')
         _cu2 = _c2.cursor()
         _cu2.execute("SELECT id, api_key, name, description, is_active FROM api_credentials WHERE id=%s", (key_id,))
@@ -543,7 +619,9 @@ def watch_pool_score():
     cu.execute("SELECT MAX(trade_date) FROM strategy_signal")
     td = str(cu.fetchone()[0])
     
-    params = [td, td, td, td]
+    from datetime import date
+    today_str = date.today().isoformat()
+    params = [td, td, today_str, today_str]
     sql = """
         SELECT wp.ts_code, COALESCE(wp.name, sb.name, ''), ss.composite_score, ss.calibrated_score, ss.raw_score,
                ss.trend_score, ss.momentum_score, ss.structure_score, ss.emotion_score,
@@ -574,17 +652,17 @@ def watch_pool_score():
             'composite_score': float(r[2]) if r[2] else None,
             'calibrated_score': float(r[3]) if r[3] else None,
             'raw_score': float(r[4]) if r[4] else None,
-            'trend_score': float(r[5]) if r[5] else None,
-            'momentum_score': float(r[6]) if r[6] else None,
-            'structure_score': float(r[7]) if r[7] else None,
-            'emotion_score': float(r[8]) if r[8] else None,
+            'trend_score': float(r[5]) if r[5] is not None else None,
+            'momentum_score': float(r[6]) if r[6] is not None else None,
+            'structure_score': float(r[7]) if r[7] is not None else None,
+            'emotion_score': float(r[8]) if r[8] is not None else None,
             'signal_label': r[9] or '',
             'direction': r[10] or '',
             'season': r[11] or '',
-            'pos_score': float(r[12]) if len(r) > 12 and r[12] else None,
-            'mf_score': float(r[13]) if len(r) > 13 and r[13] else None,
-            'margin_score': float(r[14]) if len(r) > 14 and r[14] else None,
-            'vol_ratio': float(r[15]) if len(r) > 15 and r[15] else None,
+            'pos_score': float(r[12]) if len(r) > 12 and r[12] is not None else None,
+            'mf_score': float(r[13]) if len(r) > 13 and r[13] is not None else None,
+            'margin_score': float(r[14]) if len(r) > 14 and r[14] is not None else None,
+            'vol_ratio': float(r[15]) if len(r) > 15 and r[15] is not None else None,
             'industry': r[16] if len(r) > 16 else '',
             'close_price': float(r[17]) if len(r) > 17 and r[17] else None,
             'change_pct': float(r[18]) if len(r) > 18 and r[18] else None,
@@ -729,6 +807,11 @@ app.register_blueprint(_data_refresh_router)
 import importlib
 _tide = importlib.import_module('tide_engine.tide_routes')
 app.register_blueprint(_tide.tide_bp)
+
+# 注册风险/信号分级路由
+import importlib
+_risk = importlib.import_module('routes.risk')
+app.register_blueprint(_risk.risk_bp)
 
 
 # ═══════════════════════════════════════════

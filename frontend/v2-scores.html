@@ -81,10 +81,9 @@ th:hover{color:var(--t1)}th.srt{color:var(--accent)}tr:hover td{background:var(-
 </div>
 <div><table><thead><tr>
 <th onclick=sort(1) class=srt id=h1>#</th><th onclick=sort(2)>代码</th><th onclick=sort(3)>名称</th><th style=color:var(--t3)>行业</th><th style=color:#2ecc71>现价</th><th style=color:var(--t3)>涨跌幅</th><th onclick=sort(4)>校准分</th><th onclick=sort(5)>原始分</th><th style=color:var(--t3)>板块季节</th>
-<th onclick=sort(6) style=color:#60a5fa>趋势30%</th><th onclick=sort(7) style=color:#34d399>位置15%</th>
-<th onclick=sort(8) style=color:#c084fc>结构10%</th><th onclick=sort(9) style=color:#fbbf24>动量25%</th>
-<th onclick=sort(10) style=color:#f87171>大单15%</th><th onclick=sort(11) style=color:#38bdf8>融资10%</th>
-<th onclick=sort(12)>量比</th><th style=color:#f97316>盘中信号</th><th>操作建议</th>
+<th onclick=sort(6) style=color:#60a5fa>趋势</th><th onclick=sort(7) style=color:#c084fc>结构</th>
+<th onclick=sort(8) style=color:#fbbf24>动量</th><th onclick=sort(9) style=color:#f87171>大单</th>
+<th onclick=sort(10)>量比</th><th style=color:#f97316>盘中信号</th><th>操作建议</th>
 </tr></thead><tbody id=tb></tbody></table></div>
 <div class=pg id=pg></div>
 </div>
@@ -167,11 +166,11 @@ advHtml+='</div>';
 // 仓位合规指示器
 advHtml+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--bg5);border:1px solid var(--bd);font-size:.78em">\n<div style=display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px>';
 advHtml+='<div style=display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px>';
-advHtml+='<span><b>📊 方案C仓位规则</b> 单票≤总资金×(15%+5%偏差) | 总仓≤季节上限 | 回撤>15%自动降仓</span>';
+advHtml+='<span><b>📊 方案B仓位规则</b> 买入≥75 | 持有≤30天 | 止损-7%/-5% | 移动止盈15% | 单票≤20% | 总仓≤30% | 回撤>15%自动降仓</span>';
 // 计算当前总仓大概比例（从mkt数据反推）
 const curSeason=sn||'chaos';
 const curP=sp[curSeason]||{totalPct:20};
-advHtml+='<span style=color:var(--t3)>当前混沌+弱春 → 总仓≤'+curP.totalPct+'%  |  单票≤15%(含5%偏差) <span title="被动上涨超标不算违规;主动买入超软上限(20%)才拦截">📖</span></span>';
+advHtml+='<span style=color:var(--t3)>当前统一75分 → 总仓≤'+curP.totalPct+'%  |  单票≤20%(含5%偏差) <span title="被动上涨超标不算违规;主动买入超软上限(25%)才拦截">📖</span></span>';
 advHtml+='</div></div>';
 
 document.getElementById('adviceBox').innerHTML=advHtml;
@@ -207,7 +206,7 @@ try{
 const r=await apiFetch(A+'/api/v2/watch-pool/score-list?page='+(p||1)+'&page_size=310&keyword='+encodeURIComponent(q));
 const d=await r.json();const dd=d.data||{};D=dd.stocks||[];const DT=dd.total||0;
 document.getElementById('topDate').textContent='共'+DT+'只 | 引擎: V2动量轨道';
-}catch(e){document.getElementById('tb').innerHTML='<tr><td colspan=14 style=text-align:center;color:var(--t3);padding:30px>加载失败</td></tr>';return}
+}catch(e){document.getElementById('tb').innerHTML='<tr><td colspan=13 style=text-align:center;color:var(--t3);padding:30px>加载失败</td></tr>';return}
 
 // 信号过滤
 let arr=[...D];const sfv=document.getElementById('sf').value;
@@ -217,8 +216,8 @@ else if(sfv==='CAUTIOUS')arr=arr.filter(x=>(x.calibrated_score||0)>=40&&(x.calib
 else if(sfv==='WAIT')arr=arr.filter(x=>(x.calibrated_score||0)<40);
 
 // 排序
-const keys={1:'index',2:'ts_code',3:'name',4:'calibrated_score',5:'raw_score',6:'trend_score',7:'pos_score',
-  8:'structure_score',9:'momentum_score',10:'mf_score',11:'margin_score',12:'vol_ratio'};
+const keys={1:'index',2:'ts_code',3:'name',4:'calibrated_score',5:'raw_score',6:'trend_score',
+  7:'structure_score',8:'momentum_score',9:'mf_score',10:'vol_ratio'};
 const k=keys[DI]||'composite_score';const asc=DS==='asc';
 arr.sort((a,b)=>{let va=a[k]||0,vb=b[k]||0;if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase()}return asc?va>vb?1:va<vb?-1:0:va<vb?1:va>vb?-1:0});
 
@@ -228,8 +227,8 @@ const tbody=document.getElementById('tb');
 
 tbody.innerHTML=pd.map((s,i)=>{
 const idx=st+i+1;const sc=s.composite_score||0;const ca=s.calibrated_score||0;const raw=s.raw_score||sc;
-const tr_d=s.trend_score||0;const pp_score=s.pos_score||0;const ss=s.structure_score||0;
-const mms=s.momentum_score||0;const mfs=s.mf_score||0;const mgs=s.margin_score||0;
+const tr_d=s.trend_score||0;const ss=s.structure_score||0;
+const mms=s.momentum_score||0;const mfs=s.mf_score||0;
 const vr=s.vol_ratio||1.0;
 const snMap={summer:'☀️夏季',autumn:'🍂秋季',winter:'❄️冬季',spring:'🌱春季',chaos:'🌀混沌',chaos_spring:'🌤️弱春',chaos_autumn:'⛅弱秋'};
 const seaBadge=snMap[s.season]?'<span class="season-badge '+s.season+'" style=font-size:.7em>'+snMap[s.season]+'</span>':'<span style=color:var(--t3);font-size:.72em>—</span>';
@@ -255,15 +254,13 @@ return '<tr>'+
 '<td style=color:var(--t3)>'+sc.toFixed(1)+'</td>'+
 '<td>'+seaBadge+'</td>'+
 '<td>'+tr_d.toFixed(0)+'</td>'+
-'<td style=color:#34d399>'+pp_score.toFixed(0)+'</td>'+
 '<td style=color:#c084fc>'+ss.toFixed(0)+'</td>'+
 '<td style=color:#fbbf24>'+mms.toFixed(0)+'</td>'+
 '<td style=color:'+(mfs>=60?'#f87171':'var(--t3)')+'>'+mfs.toFixed(0)+'</td>'+
-'<td style=color:'+(mgs>=60?'#38bdf8':'var(--t3)')+'>'+mgs.toFixed(0)+'</td>'+
 '<td style=color:'+vrColor+'>'+vr.toFixed(2)+'</td>'+
 '<td><span class="sb '+(s.intraday_signal&&(s.intraday_signal.includes('买')||s.intraday_signal.includes('强'))?'sb1':s.intraday_signal&&(s.intraday_signal.includes('卖')||s.intraday_signal.includes('逃')||s.intraday_signal.includes('空'))?'sb5':'sb4')+'" style=font-size:.7em>'+(s.intraday_signal||'—')+'</span></td>'+
 '<td><span class="sb '+actClass+'" style=font-size:.7em>'+act+'</span></td>'+
-'</tr>'}).join('')||'<tr><td colspan=18 style=text-align:center;color:var(--t3);padding:30px>暂无数据</td></tr>';
+'</tr>'}).join('')||'<tr><td colspan=16 style=text-align:center;color:var(--t3);padding:30px>暂无数据</td></tr>';
 
 // 分页
 let ph='';const ms=Math.min(tp,8);

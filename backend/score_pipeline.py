@@ -3,8 +3,10 @@
 P6双轨评分管道 — 独立脚本，供cron调用
 直接从数据库读已拉取的数据，执行全量评分并入库
 """
-import pymysql, sys
-sys.path.insert(0, '.')
+import pymysql, sys, os
+# 确保能找到同级模块和engine目录
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from p6_dual_track_engine import batch_score, MarketContext
 from season_engine import SeasonEngine
 
@@ -103,21 +105,28 @@ for i, r in enumerate(results):
             vr = 1.0
         
         # V12.5: 短期信号分
+        # 惩罚分（V13.3新增）
+        p_score = float(ding.get('penalty_score', 0) or 0)
+        p_reason = ding.get('penalty_reason', '') or ''
+        # 引擎计算的修后评分（已在score_stock中减去了penalty）
+        adjusted_score = float(r['score'])
+
         stf = r.get('stf', {}) or {}
         stf_score = float(stf.get('short_term_score', 50) or 50)
         stf_capital = float(stf.get('capital_inertia', 50) or 50)
         stf_volume = float(stf.get('volume_health', 50) or 50)
         stf_overbought = float(stf.get('overbought_safety', 50) or 50)
         stf_momentum = float(stf.get('short_momentum', 50) or 50)
-        
+
         cur2.execute("""
             INSERT INTO strategy_signal 
                 (ts_code, trade_date, track, composite_score, calibrated_score,
                  scoring_strategy, direction, operation_mode, buy_sell_point,
                  reason_chain, signal_confidence, autumn_tiger, tiger_confidence,
                  hengjiyuan_level, trend_score, structure_score, momentum_score, pos_score, mf_score, margin_score, vol_ratio,
-                 season, short_term_score, stf_capital, stf_volume, stf_overbought, stf_momentum)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 season, penalty_score, penalty_reason,
+                 short_term_score, stf_capital, stf_volume, stf_overbought, stf_momentum)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON DUPLICATE KEY UPDATE
                 composite_score=VALUES(composite_score), calibrated_score=VALUES(calibrated_score),
                 trend_score=VALUES(trend_score), structure_score=VALUES(structure_score),
@@ -125,13 +134,16 @@ for i, r in enumerate(results):
                 pos_score=VALUES(pos_score), mf_score=VALUES(mf_score),
                 margin_score=VALUES(margin_score), vol_ratio=VALUES(vol_ratio),
                 season=VALUES(season),
+                penalty_score=VALUES(penalty_score),
+                penalty_reason=VALUES(penalty_reason),
                 short_term_score=VALUES(short_term_score),
                 stf_capital=VALUES(stf_capital), stf_volume=VALUES(stf_volume),
                 stf_overbought=VALUES(stf_overbought), stf_momentum=VALUES(stf_momentum)
-        """, (code, td, r['track'], float(r['score']), float(r.get('calibrated_score',0)),
+        """, (code, td, r['track'], adjusted_score, float(r.get('calibrated_score',0)),
               'dual_track_v1', op_mode, '', '', '', sig_conf, 0, 0.0, 'weak_heng',
               tr_score, ss_score, mo_score, po_score, mf_v, mg_score, vr,
-              stock_season, stf_score, stf_capital, stf_volume, stf_overbought, stf_momentum))
+              stock_season, p_score, p_reason,
+              stf_score, stf_capital, stf_volume, stf_overbought, stf_momentum))
         
         # 同步写入daily_score_snapshot（前端v2-scores.html使用的评分快照表）
         try:
@@ -182,3 +194,178 @@ for i, r in enumerate(cur3.fetchall()):
     print('  %2d. %-10s %-8s 校准:%5.1f 原始:%5.1f' % (i+1, r['ts_code'], r.get('name',''), sc, cs))
 cur3.close()
 conn3.close()
+
+# ============================================================
+# [V14] H5 Alpha评分层 — 替换L3情绪因子
+# 使用正向5因子：alpha005/034/046/062/089
+# emotion_score 字段现在存储H5评分（替代原L3情绪因子）
+# ============================================================
+print('🧬 [V14] H5 Alpha评分层...')
+try:
+    sys.path.insert(0, '/opt/stock-analyzer')
+    from v14_engine import compute_h5_scores
+    
+    # 趋势季节差异化权重
+    # summer/spring: 10% (动量主驱，H5辅助)
+    # weak_spring/chaos_spring: 15% 
+    # chaos: 20% (评分区分度不足，H5提供增量)
+    # chaos_autumn/weak_autumn/autumn: 15~
+    # winter: 10% (低仓位，H5意义不大)
+    SEASON_H5_WEIGHTS = {
+        'summer': 0.10, 'spring': 0.10, 'weak_spring': 0.15, 'chaos_spring': 0.15,
+        'chaos': 0.20, 'chaos_autumn': 0.15, 'weak_autumn': 0.15, 'autumn': 0.15,
+        'winter': 0.10,
+    }
+    
+    # 获取当日趋势季节
+    conn4 = pymysql.connect(**DB)
+    cur4 = conn4.cursor()
+    cur4.execute("SELECT season FROM season_state WHERE index_code='MARKET' AND trade_date=%s", (td,))
+    season_row = cur4.fetchone()
+    season = season_row['season'] if season_row else 'chaos'
+    h5_weight = SEASON_H5_WEIGHTS.get(season, 0.15)
+    short_alpha = h5_weight  # 弹性混合: blended = α×short + (1-α)×mid
+    print(f'  🎯 趋势季节: {season} → α(弹性混合)={short_alpha:.0%} (blended = α×H5 + (1-α)×P6)')
+    
+    # 计算H5评分
+    h5_map = compute_h5_scores(td)
+    if h5_map and len(h5_map) > 50:
+        # 获取该日strategy_signal列表
+        cur4.execute("SELECT ts_code FROM strategy_signal WHERE trade_date=%s", (td,))
+        signal_codes = [r['ts_code'] for r in cur4.fetchall()]
+        
+        # 批量更新emotion_score（保持原始H5评分，不混合）
+        # 前端/策略读取strategy_signal表的emotion_score时拿到的是H5
+        # V14混合评分在daily_v14_score表中以v14_score字段存放
+        updated = 0
+        v14_map = {}  # {code: v14_score}
+        
+        # 读取P6评分做V14混合
+        cur4.execute("SELECT ts_code, composite_score FROM strategy_signal WHERE trade_date=%s", (td,))
+        p6_scores = {r['ts_code']: float(r['composite_score'] or 0) for r in cur4.fetchall()}
+        
+        for code in signal_codes:
+            h5_val = h5_map.get(code)
+            if h5_val is not None:
+                # 更新emotion_score存储原始H5，同时写入short_term_score
+                cur4.execute(
+                    "UPDATE strategy_signal SET emotion_score=%s, short_term_score=%s WHERE ts_code=%s AND trade_date=%s",
+                    (h5_val, h5_val, code, td))
+                updated += 1
+                
+                # 计算V14混合分
+                p6 = p6_scores.get(code, 50)
+                v14 = p6 * (1 - h5_weight) + h5_val * h5_weight
+                v14_map[code] = round(v14, 1)
+        
+        conn4.commit()
+        
+        # 写入daily_v14_score表
+        if not v14_map:
+            pass
+        else:
+            # 确保表存在
+            cur4.execute("""
+                CREATE TABLE IF NOT EXISTS daily_v14_score (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    ts_code VARCHAR(20) NOT NULL,
+                    trade_date DATE NOT NULL,
+                    v14_score DECIMAL(6,1),
+                    p6_score DECIMAL(6,1),
+                    h5_score DECIMAL(6,1),
+                    h5_weight DECIMAL(4,2),
+                    UNIQUE KEY uk_stock_date (ts_code, trade_date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            written = 0
+            for code, v14 in v14_map.items():
+                p6 = p6_scores.get(code, 50)
+                h5 = h5_map.get(code, 50)
+                cur4.execute("""
+                    INSERT INTO daily_v14_score (ts_code, trade_date, v14_score, p6_score, h5_score, h5_weight)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE v14_score=VALUES(v14_score),
+                        p6_score=VALUES(p6_score), h5_score=VALUES(h5_score)
+                """, (code, td, v14, round(p6, 1), h5, h5_weight))
+                written += 1
+            conn4.commit()
+            print(f'  ✅ emotion_score→H5: {updated}只 | daily_v14_score: {written}只 (权重{h5_weight:.0%})')
+        
+        # 更新daily_score_snapshot表的h5_score和v14_score
+        snap_updated = 0
+        for code, v14 in v14_map.items():
+            h5 = h5_map.get(code, 50)
+            cur4.execute(
+                "UPDATE daily_score_snapshot SET h5_score=%s, v14_score=%s WHERE ts_code=%s AND trade_date=%s",
+                (h5, v14, code, td))
+            snap_updated += 1
+            if snap_updated % 200 == 0:
+                conn4.commit()
+        conn4.commit()
+        if snap_updated > 0:
+            print(f'  ✅ daily_score_snapshot h5/v14更新: {snap_updated}只')
+        
+        # 写入 bt_s1_score / bt_m1_score 回测表
+        bt_s1_written = 0
+        for code, v14 in v14_map.items():
+            h5 = h5_map.get(code, 50)
+            # bt_s1_score: S1评分 = H5评分
+            cur4.execute("""
+                INSERT INTO bt_s1_score (ts_code, trade_date, s1_score)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE s1_score=VALUES(s1_score)
+            """, (code, td, h5))
+            bt_s1_written += 1
+            if bt_s1_written % 300 == 0: cur4.connection.commit()
+        cur4.connection.commit()
+        if bt_s1_written > 0:
+            print(f'  ✅ bt_s1_score: {bt_s1_written}条')
+        
+        # bt_m1_score: M1评分 = composite_score
+        bt_m1_written = 0
+        for code in p6_scores:
+            m1 = p6_scores[code]
+            cur4.execute("""
+                INSERT INTO bt_m1_score (ts_code, trade_date, m1_score)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE m1_score=VALUES(m1_score)
+            """, (code, td, round(m1, 1)))
+            bt_m1_written += 1
+            if bt_m1_written % 300 == 0: cur4.connection.commit()
+        cur4.connection.commit()
+        if bt_m1_written > 0:
+            print(f'  ✅ bt_m1_score: {bt_m1_written}条')
+        
+        cur4.close()
+        conn4.close()
+    else:
+        cur4.close(); conn4.close()
+        print('  ⚠️ H5评分数据不足(%d只)，跳过替换' % (len(h5_map) if h5_map else 0))
+except Exception as e:
+    print('  ❌ V14集成失败: %s' % str(e)[:100])
+    import traceback
+    traceback.print_exc()
+
+# ============================================================
+# [PATCH V13.3d] 风控降级 + 评分后处理层
+# 依赖: risk_downgrade.py / score_post_processor.py
+# 必须在评分入库后执行，确保全量评分已有
+# ============================================================
+try:
+    sys.path.insert(0, '/opt/stock-analyzer')
+    from risk_downgrade import run_risk_downgrade
+    level = run_risk_downgrade(str(ctx.trade_date))
+    print('  🔒 [V13.3d] 风控降级: %s' % level)
+except Exception as e:
+    print('  ⚠️ [V13.3d] 风控降级失败: %s' % str(e)[:80])
+    import traceback; traceback.print_exc()
+
+try:
+    from score_post_processor import run_batch_from_db
+    n = run_batch_from_db(str(ctx.trade_date))
+    print('  🧹 [V13.3d] 后处理层: %d条' % n)
+except Exception as e:
+    print('  ⚠️ [V13.3d] 后处理层失败: %s' % str(e)[:80])
+    import traceback; traceback.print_exc()
+
+print('📦 [V13.3d] 评分管道完成 ✅')

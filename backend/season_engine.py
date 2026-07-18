@@ -1552,15 +1552,20 @@ def save_result_to_db(result: Dict, db_config: dict = None):
     cur.execute("""
         INSERT INTO season_state (trade_date, index_code, season, raw_score, confidence,
                                    rule_chain, position_advice, season_votes,
-                                   hengjiyuan_level, hengjiyuan_score, confidence_mult)
-        VALUES (%s, 'MARKET', %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   hengjiyuan_level, hengjiyuan_score, confidence_mult,
+                                   regime, regime_strength, chaos_subtype, scoring_strategy)
+        VALUES (%s, 'MARKET', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE season=VALUES(season), raw_score=VALUES(raw_score),
                                 confidence=VALUES(confidence), rule_chain=VALUES(rule_chain),
                                 position_advice=VALUES(position_advice),
                                 season_votes=VALUES(season_votes),
                                 hengjiyuan_level=VALUES(hengjiyuan_level),
                                 hengjiyuan_score=VALUES(hengjiyuan_score),
-                                confidence_mult=VALUES(confidence_mult)
+                                confidence_mult=VALUES(confidence_mult),
+                                regime=VALUES(regime),
+                                regime_strength=VALUES(regime_strength),
+                                chaos_subtype=VALUES(chaos_subtype),
+                                scoring_strategy=VALUES(scoring_strategy)
     """, (
         result['trade_date'],
         result['market_season'],
@@ -1572,6 +1577,10 @@ def save_result_to_db(result: Dict, db_config: dict = None):
         hj_level,
         hj_score,
         hj_conf,
+        result.get('market_regime'),
+        result.get('regime_strength'),
+        result.get('chaos_subtype'),
+        result.get('market_scoring_strategy'),
     ))
 
     # 各指数明细

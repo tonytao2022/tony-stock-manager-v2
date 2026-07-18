@@ -90,7 +90,6 @@
     <button class="tab active" onclick="switchTab('signals')">📊 信号列表</button>
     <button class="tab" onclick="switchTab('checkpoints')">🔍 检查点</button>
     <button class="tab" onclick="switchTab('config')">⚙️ 配置</button>
-    <button class="tab" onclick="switchTab('versions')">📜 版本</button>
   </div>
 
   <!-- Tab 内容 -->
@@ -160,15 +159,8 @@
         <button class="action-btn" onclick="loadConfig()" style="margin-left:8px">🔄 恢复</button>
       </div>
     </div>
-
-    <!-- 版本历史 -->
-    <div id="tab-versions" style="display:none">
-      <div class="card">
-        <h3>📜 版本历史</h3>
-        <div id="versionList" style="margin-top:8px">加载中...</div>
-      </div>
-    </div>
   </div>
+</div>
 
 <script>
 const AK="90a275cbcc004fd5";
@@ -306,49 +298,28 @@ async function loadConfig() {
   configItems = d.data.items || [];
   const configDict = d.data.config || {};
 
-  // 渲染可编辑的季节参数矩阵
+  // 渲染季节参数矩阵
   const matrixEl = document.getElementById('configSeasonMatrix');
   if (matrixEl && configItems.length > 0) {
-    const seas = ['summer','spring','chaos_spring','chaos','chaos_autumn','weak_autumn','autumn','winter'];
-    const emoji = {summer:'☀️',spring:'🌸',chaos_spring:'🌤️',chaos:'🌪️',chaos_autumn:'🌥️',weak_autumn:'☁️',autumn:'🍂',winter:'❄️'};
+    const seas = ['summer','spring','chaos_spring','chaos','chaos_autumn','autumn','winter'];
     const rows = seas.map(s => {
       const item = configItems.find(i => i.season_type === s);
       if (!item) return '';
+      const emoji = {summer:'☀️',spring:'🌸',chaos_spring:'🌤️',chaos:'🌪️',chaos_autumn:'🌥️',autumn:'🍂',winter:'❄️'};
       return `<tr>
-        <td style="white-space:nowrap">${emoji[s]||''} ${s}</td>
-        <td><input type="number" step="1" min="0" max="100"
-               value="${item.buy_min_score}"
-               id="sea_${item.id}_buy_min_score" data-id="${item.id}" data-sea="${s}" data-field="buy_min_score"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#6ee7b7;font-weight:600;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="1" min="1" max="90"
-               value="${item.max_hold_days}"
-               id="sea_${item.id}_max_hold_days" data-id="${item.id}" data-field="max_hold_days"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="1" min="0" max="30"
-               value="${item.stop_loss_pct}"
-               id="sea_${item.id}_stop_loss_pct" data-id="${item.id}" data-field="stop_loss_pct"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#fca5a5;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="1" min="0" max="30"
-               value="${item.position_tolerance}"
-               id="sea_${item.id}_position_tolerance" data-id="${item.id}" data-field="position_tolerance"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#fca5a5;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="0.5" min="0" max="50"
-               value="${item.trailing_stop_pct}"
-               id="sea_${item.id}_trailing_stop_pct" data-id="${item.id}" data-field="trailing_stop_pct"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="1" min="0" max="100"
-               value="${item.max_pos_pct}"
-               id="sea_${item.id}_max_pos_pct" data-id="${item.id}" data-field="max_pos_pct"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:3px 6px;border-radius:4px;text-align:center"></td>
-        <td><input type="number" step="1" min="0" max="100"
-               value="${item.max_total_pct}"
-               id="sea_${item.id}_max_total_pct" data-id="${item.id}" data-field="max_total_pct"
-               style="width:60px;background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:3px 6px;border-radius:4px;text-align:center"></td>
+        <td>${emoji[s]||''} ${s}</td>
+        <td style="color:#6ee7b7;font-weight:600">${item.buy_min_score}</td>
+        <td>${item.max_hold_days}d</td>
+        <td style="color:#fca5a5">-${item.stop_loss_pct}%</td>
+        <td style="color:#fca5a5">-${item.position_tolerance}%</td>
+        <td>${item.trailing_stop_pct}%</td>
+        <td>${item.max_pos_pct}%</td>
+        <td>${item.max_total_pct}%</td>
       </tr>`;
     }).join('');
     matrixEl.innerHTML = `<table style="width:100%;font-size:.82em">
       <thead><tr style="color:#888;font-weight:600">
-        <th>季节</th><th style="min-width:70px">买入线</th><th style="min-width:70px">持有上限</th><th style="min-width:70px">T1止损%</th><th style="min-width:70px">T2止损%</th><th style="min-width:70px">移动止盈%</th><th style="min-width:70px">单票上限%</th><th style="min-width:70px">总仓上限%</th>
+        <th>季节</th><th>买入线</th><th>持有上限</th><th>T1止损</th><th>T2止损</th><th>移动止盈</th><th>单票上限</th><th>总仓上限</th>
       </tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
@@ -377,30 +348,6 @@ async function loadConfig() {
 }
 
 async function saveConfig() {
-  // 1. 收集季节参数矩阵的修改
-  const seaInputs = document.querySelectorAll('#configSeasonMatrix input[data-id]');
-  const seaMap = {};  // {id: {field: val}}
-  for (const inp of seaInputs) {
-    const id = inp.dataset.id;
-    const field = inp.dataset.field;
-    const sea = inp.dataset.sea || '';
-    const val = parseFloat(inp.value);
-    if (isNaN(val)) continue;
-    if (!seaMap[id]) seaMap[id] = {id: parseInt(id), season_type: sea};
-    seaMap[id][field] = val;
-  }
-
-  const seaItems = Object.values(seaMap);
-  let seasonOk = 0, seasonFail = 0;
-  if (seaItems.length > 0) {
-    try {
-      const r = await api('/strategy/config', 'PUT', {items: seaItems});
-      if (r.code === 0) { seasonOk = r.data?.updated || seaItems.length; }
-      else { seasonFail = seaItems.length; }
-    } catch { seasonFail = seaItems.length; }
-  }
-
-  // 2. 保存通用配置项
   const inputs = document.querySelectorAll('#configGrid input');
   let ok = 0, fail = 0;
 
@@ -414,58 +361,8 @@ async function saveConfig() {
     } catch { fail++; }
   }
 
-  alert(`✅ 保存完成\n季节参数: ${seasonOk}个季节更新${seasonFail ? ', '+seasonFail+'个失败' : ''}\n通用配置: ${ok}个成功${fail ? ', '+fail+'个失败' : ''}`);
-  if (seasonOk > 0 || ok > 0) loadConfig();
-}
-
-// ─── 版本历史 ─────────────────────────────────────────
-async function loadVersions() {
-  const el = document.getElementById('versionList');
-  try {
-    const d = await api('/strategy/versions');
-    if (d.code !== 0 || !d.data?.versions?.length) {
-      el.innerHTML = '<div style="color:#888;padding:20px;text-align:center">暂无版本记录</div>';
-      return;
-    }
-    const vers = d.data.versions;
-    el.innerHTML = `<table style="width:100%;font-size:.82em">
-      <thead><tr style="color:#888;font-weight:600">
-        <th>版本</th><th>名称</th><th>变更说明</th><th>创建者</th><th>时间</th><th>操作</th>
-      </tr></thead>
-      <tbody>${vers.map(v => `
-        <tr>
-          <td style="font-weight:600;color:#e94560">V${v.version}</td>
-          <td>${v.name || '--'}</td>
-          <td style="color:#94a3b8;font-size:.9em">${v.desc || ''}</td>
-          <td>${v.created_by || 'system'}</td>
-          <td style="color:#888;font-size:.85em">${v.created_at ? v.created_at.substring(0,16) : ''}</td>
-          <td>
-            <button class="action-btn" style="padding:4px 10px;font-size:.82em"
-                    onclick="applyVersion(${v.version},'${(v.name||'V'+v.version).replace(/'/g,'')}')">
-              🔄 回滚
-            </button>
-          </td>
-        </tr>
-      `).join('')}</tbody></table>`;
-  } catch(e) {
-    el.innerHTML = `<div style="color:#fca5a5;padding:20px">加载失败: ${e.message}</div>`;
-  }
-}
-
-async function applyVersion(ver, name) {
-  if (!confirm(`确定回滚到 V${ver} (${name})？当前配置将被覆盖。`)) return;
-  try {
-    const d = await api('/strategy/version/' + ver + '/apply', 'POST');
-    if (d.code === 0) {
-      alert(`✅ 已回滚到 V${ver}`);
-      loadVersions();
-      loadConfig();
-    } else {
-      alert('❌ 回滚失败: ' + (d.message || '未知错误'));
-    }
-  } catch(e) {
-    alert('❌ 回滚失败: ' + e.message);
-  }
+  alert(`保存完成：${ok}个成功${fail ? ', '+fail+'个失败' : ''}`);
+  if (ok > 0) loadConfig();
 }
 
 // ─── Tab切换 ──────────────────────────────────────────
@@ -478,7 +375,6 @@ function switchTab(name) {
   if (name === 'signals') loadSignals();
   if (name === 'checkpoints') loadCheckpoints();
   if (name === 'config') loadConfig();
-  if (name === 'versions') loadVersions();
 }
 
 // ─── 启动 ─────────────────────────────────────────────

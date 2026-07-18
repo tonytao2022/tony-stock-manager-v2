@@ -154,18 +154,80 @@ def get_config():
 @strategy_bp.route('/strategy/config', methods=['PUT'])
 @require_auth
 def update_config():
-    """更新策略配置"""
+    """更新策略配置 — 支持批量保存季节参数矩阵"""
+    import json
     try:
         data = request.get_json()
-        if not data or 'config_key' not in data or 'config_value' not in data:
-            return api_error('缺少 config_key 或 config_value')
+        if not data:
+            return api_error('缺少请求数据')
 
-        with db_cursor() as cur:
-            cur.execute("""
-                UPDATE strategy_config SET config_value=%s WHERE config_key=%s
-            """, [data['config_value'], data['config_key']])
+        # 兼容旧格式: 单字段更新 {config_key, config_value}
+        if 'config_key' in data:
+            with db_cursor() as cur:
+                cur.execute("""
+                    UPDATE strategy_config SET config_value=%s WHERE config_key=%s
+                """, [data['config_value'], data['config_key']])
+            return api_success({'config_key': data['config_key']}, '更新成功')
 
-        return api_success({'config_key': data['config_key']}, '更新成功')
+        # 新格式: 批量季节参数 [{id, buy_min_score, stop_loss_pct, ...}]
+        items = data.get('items', [])
+        if not items:
+            return api_error('items 为空')
+
+        affected_seasons = []
+        with db_cursor(commit=False) as cur:
+            for item in items:
+                cid = item.get('id')
+                if not cid:
+                    continue
+                sql_parts = []
+                params = []
+                for field in ['buy_min_score', 'max_pos_pct', 'max_total_pct', 'stop_loss_pct',
+                              'max_hold_days', 'cool_days', 'trailing_stop_pct', 'p1_score',
+                              'p2_score', 'p3_score', 'position_tolerance']:
+                    if field in item and item[field] is not None:
+                        sql_parts.append(f'{field}=%s')
+                        params.append(item[field])
+                if sql_parts:
+                    params.append(cid)
+                    cur.execute(f"UPDATE strategy_config SET {', '.join(sql_parts)}, updated_at=NOW() WHERE id=%s", params)
+                    affected_seasons.append(item.get('season_type', str(cid)))
+
+        # 自动创建版本快照
+        try:
+            cur.execute("SELECT MAX(version) as mv FROM strategy_config_versions")
+            row = cur.fetchone()
+            next_ver = (row['mv'] or 0) + 1
+
+            cur.execute("SELECT * FROM strategy_config WHERE is_active=1 ORDER BY id")
+            configs = cur.fetchall()
+
+            for cfg in configs:
+                snap = json.dumps({
+                    'id': cfg['id'], 'name': cfg['name'],
+                    'buy_min_score': cfg['buy_min_score'],
+                    'max_pos_pct': cfg['max_pos_pct'],
+                    'max_total_pct': cfg['max_total_pct'],
+                    'stop_loss': float(cfg['stop_loss_pct']) if cfg['stop_loss_pct'] else 0,
+                    'max_hold': cfg['max_hold_days'],
+                    'cool_days': cfg['cool_days'],
+                    'trailing_stop': float(cfg['trailing_stop_pct']) if cfg['trailing_stop_pct'] else 0,
+                    'p1': cfg['p1_score'], 'p2': cfg['p2_score'], 'p3': cfg['p3_score'],
+                    'season_type': cfg['season_type'],
+                    'max_total_pct': cfg['max_total_pct'],
+                    'position_tolerance': cfg['position_tolerance'],
+                })
+                cur.execute("""
+                    INSERT INTO strategy_config_versions
+                    (version, version_name, config_id, snapshot, change_desc, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (next_ver, f'V{next_ver}', cfg['id'], snap,
+                       f"批量更新: {', '.join(affected_seasons[:5])}" + ('...' if len(affected_seasons) > 5 else ''),
+                       'web'))
+        except Exception as snap_err:
+            print(f"⚠️ 快照创建失败(不影响保存): {snap_err}")
+
+        return api_success({'updated': len(affected_seasons), 'seasons': affected_seasons}, '季节参数已更新')
     except Exception as e:
         return api_error(str(e))
 
