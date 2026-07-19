@@ -519,8 +519,22 @@ class SeasonJudge:
         # v2.1: 三态识别
         regime, regime_strength, regime_reasons = self.regime_detector.detect_at(idx)
 
+        # v2.2 方向性修正：当沪深300近20日跌幅显著时额外扣分
+        # (解决熊市侧评分反向问题——现有维度在下跌时被低波/趋势持续性维度冲抵)
+        correction = 0
+        if self.roc20[idx] is not None:
+            if self.roc20[idx] < -0.06:
+                correction = -2.5
+            elif self.roc20[idx] < -0.04:
+                correction = -1.5
+            elif self.roc20[idx] < -0.02:
+                correction = -0.5
+        if correction != 0 and regime == 'bear':
+            correction *= 1.5  # regime=熊时加强扣分
+        raw_score_corrected = raw_score + correction
+
         # v2.1: 动态阈值季节映射
-        season = self._score_to_season_adjusted(raw_score, regime)
+        season = self._score_to_season_adjusted(raw_score_corrected, regime)
 
         # 混沌细分
         chaos_subtype = None
@@ -745,22 +759,24 @@ class SeasonJudge:
 
         atr_pct = self.atr14[idx] / self.closes[idx]
 
-        # ATR% 评分
-        if atr_pct < 0.015:
+        # v2.2 修正: 基于A股ATR%实际分布(0.008~0.025)校准阈值
+        # 目标: 在极低波(0.008以下)和偏高波(0.02以上)之间创造区分度
+        # A股典型: 低位0.008(持续缩量震荡), 中位0.012~0.015(正常), 高位0.02+(突破/暴跌)
+        if atr_pct < 0.010:
             score += 5
-            details.append(f'极低波环境(ATR%={atr_pct:.2%})')
-        elif atr_pct < 0.025:
+            details.append(f'极低波环境(ATR%={atr_pct:.2%},缩量筑底)')
+        elif atr_pct < 0.013:
             score += 3
-            details.append(f'低波环境(ATR%={atr_pct:.2%})')
-        elif atr_pct < 0.035:
+            details.append(f'低波环境(ATR%={atr_pct:.2%},震荡盘整)')
+        elif atr_pct < 0.018:
             score += 1
-            details.append(f'正常波动(ATR%={atr_pct:.2%})')
-        elif atr_pct > 0.05:
+            details.append(f'正常波动(ATR%={atr_pct:.2%},趋势运行)')
+        elif atr_pct > 0.030:
             score -= 5
-            details.append(f'高波环境(ATR%={atr_pct:.2%})')
-        elif atr_pct > 0.035:
+            details.append(f'高波环境(ATR%={atr_pct:.2%},异常动荡)')
+        elif atr_pct > 0.020:
             score -= 2
-            details.append(f'偏高波动(ATR%={atr_pct:.2%})')
+            details.append(f'偏高波动(ATR%={atr_pct:.2%},方向即将明朗)')
 
         # 布林带宽度
         if self._bb_width[idx] is not None:
@@ -918,30 +934,42 @@ class SeasonJudge:
 
     @staticmethod
     def _score_to_season_adjusted(raw_score: float, regime: str) -> str:
-        """v2.2: 赛季细化 — 混沌拆分为弱春/弱秋子态"""
+        """v2.2 修正版: 赛道放宽 + 熊市侧合理化
+        
+        v2.1问题:
+        - 阈值过高(spring>6.0), 导致趋势季节仅8.4%
+        - 熊市侧(regime=bear)秋/冬边界过于敏感, 但数据显示负分区域反而涨
+        
+        v2.2修正:
+        - 将spring阈值从6.0降至4.5, summer从3.0降至2.0
+        - 熊市侧不再加大秋/冬范围, 与range一致
+        - 秋/冬用更负的阈值确保只有真正深度下跌才判空头
+        """
+        # 牛市: 标准偏激进
         if regime == 'bull':
-            if raw_score > 6.0: return 'spring'
-            elif raw_score > 3.0: return 'summer'
-            elif raw_score > 1.5: return 'chaos_spring'
-            elif raw_score > -1.5: return 'chaos'
-            elif raw_score > -3.5: return 'chaos_autumn'
-            elif raw_score > -5.0: return 'autumn'
-            else: return 'winter'
-        elif regime == 'bear':
-            if raw_score > 5.0: return 'spring'
+            if raw_score > 4.5: return 'spring'
             elif raw_score > 2.0: return 'summer'
             elif raw_score > 0.5: return 'chaos_spring'
-            elif raw_score > -1.5: return 'chaos'
-            elif raw_score > -3.5: return 'chaos_autumn'
-            elif raw_score > -4.5: return 'autumn'
-            else: return 'winter'
-        else:  # range
-            if raw_score > 5.5: return 'spring'
-            elif raw_score > 2.5: return 'summer'
-            elif raw_score > 1.0: return 'chaos_spring'
             elif raw_score > -2.0: return 'chaos'
-            elif raw_score > -3.5: return 'chaos_autumn'
-            elif raw_score > -5.5: return 'autumn'
+            elif raw_score > -4.0: return 'chaos_autumn'
+            elif raw_score > -6.0: return 'autumn'
+            else: return 'winter'
+        # 熊市: 与range一致(不再加严秋/冬)
+        elif regime == 'bear':
+            if raw_score > 4.0: return 'spring'
+            elif raw_score > 1.5: return 'summer'
+            elif raw_score > 0.0: return 'chaos_spring'
+            elif raw_score > -2.0: return 'chaos'
+            elif raw_score > -4.0: return 'chaos_autumn'
+            elif raw_score > -6.0: return 'autumn'
+            else: return 'winter'
+        else:  # range （默认态）
+            if raw_score > 4.5: return 'spring'
+            elif raw_score > 2.0: return 'summer'
+            elif raw_score > 0.5: return 'chaos_spring'
+            elif raw_score > -2.0: return 'chaos'
+            elif raw_score > -4.0: return 'chaos_autumn'
+            elif raw_score > -6.0: return 'autumn'
             else: return 'winter'
 
     @staticmethod
@@ -1116,13 +1144,6 @@ class MarketBreadthCalculator:
                                  ) * 1.02
               ) as new_lows
         """, (td, td, td, td, td, td))
-        row2 = cur.fetchone()
-        if row2:
-            nh = row2['new_highs'] or 0
-            nl = row2['new_lows'] or 0
-            result['new_high_low_ratio'] = round(nh / nl, 2) if nl > 0 else (5.0 if nh > 0 else 1.0)
-        else:
-            result['new_high_low_ratio'] = None
         row2 = cur.fetchone()
         if row2:
             nh = row2['new_highs'] or 0
