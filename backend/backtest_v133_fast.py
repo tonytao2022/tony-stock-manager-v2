@@ -195,17 +195,33 @@ def load_data(start_date='2024-09-02', end_date='2026-07-16'):
     """加载所有回测数据"""
     t0 = time.time()
     
-    # 1. 季节
-    cur.execute(
-        "SELECT trade_date, season, confidence FROM season_state "
-        "WHERE index_code='MARKET' AND trade_date>=%s AND trade_date<=%s ORDER BY trade_date",
-        (start_date, end_date)
-    )
-    seasons = {}
-    for r in cur.fetchall():
-        td = str(r['trade_date'])
-        seasons[td] = {'season': r['season'], 'confidence': float(r['confidence'] or 0.5)}
-    print(f"  ✓ 季节: {len(seasons)}天 ({time.time()-t0:.0f}s)")
+    # 1. 季节 (v2.2: 从修正后的引擎加载，替代从season_state读旧数据)
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        if 'season_engine' in sys.modules:
+            del sys.modules['season_engine']
+        from season_engine import SeasonEngine
+        engine = SeasonEngine(use_market_breadth=False)
+        s_start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        s_end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        history = engine.judge_history(start_date=s_start, end_date=s_end)
+        seasons = {}
+        for h in history:
+            td = str(h['trade_date'])
+            seasons[td] = {'season': h['season'], 'confidence': 0.7}
+        print(f"  ✓ 季节(engine v2.2): {len(seasons)}天 ({time.time()-t0:.0f}s)")
+    except Exception as e:
+        print(f"  ⚠️ 季节引擎加载失败({e})，回退到从表读取")
+        cur.execute(
+            "SELECT trade_date, season, confidence FROM season_state "
+            "WHERE index_code='MARKET' AND trade_date>=%s AND trade_date<=%s ORDER BY trade_date",
+            (start_date, end_date)
+        )
+        seasons = {}
+        for r in cur.fetchall():
+            td = str(r['trade_date'])
+            seasons[td] = {'season': r['season'], 'confidence': float(r['confidence'] or 0.5)}
+        print(f"  ✓ 季节(表回退): {len(seasons)}天 ({time.time()-t0:.0f}s)")
     
     # 2. 历史评分（从strategy_signal读原始composite_score）
     t1 = time.time()
