@@ -193,9 +193,17 @@ save_result_to_db(r)
 print(f'  结果: {r.get(\"market_season\")}/{r.get(\"market_regime\")} 评分:{r.get(\"raw_score\",0):.2f}')
 " >> $LOG 2>&1
 
-# [5/9] P6双轨评分 + 评分快照
+# [5/9] P6双轨评分 + 风控降级 + 后处理 + 评分快照
 echo "[5/9] P6双轨评分..." >> $LOG
 python3 score_pipeline.py >> $LOG 2>&1
+
+# 5b. 风控降级（在评分之后，策略评估之前）
+echo "  5b. 风控降级评估..." >> $LOG
+python3 /opt/stock-analyzer/risk_downgrade.py >> $LOG 2>&1
+
+# 5c. 后处理层数据清洗（批量模式）
+echo "  5c. 后处理层清洗..." >> $LOG
+python3 /opt/stock-analyzer/score_post_processor.py --batch --trade-date "$(date +%Y-%m-%d)" >> $LOG 2>&1
 
 # 保存当日评分快照
 echo "  保存评分快照..." >> $LOG
