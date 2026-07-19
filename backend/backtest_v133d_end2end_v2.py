@@ -32,17 +32,9 @@ MAX_POSITIONS = 8
 MAX_BUY_PER_DAY = 3
 CHARGE_RATE = 0.0005
 
-SEASON_PARAMS = {
-    'summer':         {'buy':65,'hold':30,'t1':12.0,'t2':9.0, 'trail':18.0,'mp':50,'mt':50},
-    'spring':         {'buy':65,'hold':30,'t1':12.0,'t2':9.0, 'trail':15.0,'mp':35,'mt':40},
-    'weak_spring':    {'buy':68,'hold':25,'t1':11.0,'t2':8.0, 'trail':15.0,'mp':35,'mt':40},
-    'chaos_spring':   {'buy':72,'hold':25,'t1':11.0,'t2':8.0, 'trail':15.0,'mp':20,'mt':35},
-    'chaos':          {'buy':80,'hold':25,'t1':10.0,'t2':8.0, 'trail':12.0,'mp':20,'mt':30},
-    'chaos_autumn':   {'buy':72,'hold':20,'t1':8.0, 't2':6.0, 'trail':10.0,'mp':15,'mt':20},
-    'weak_autumn':    {'buy':70,'hold':20,'t1':8.0, 't2':6.0, 'trail':12.0,'mp':20,'mt':25},
-    'autumn':         {'buy':68,'hold':20,'t1':10.0,'t2':8.0, 'trail':12.0,'mp':30,'mt':35},
-    'winter':         {'buy':85,'hold':10,'t1':5.0, 't2':4.0, 'trail':8.0, 'mp':5, 'mt':10},
-}
+# 从strategy_config表动态加载生产参数
+SEASON_PARAMS = {}  # 在运行时从DB加载
+SEASON_PARAMS_LOADED = False
 
 MOMENTUM_TRACKS = ['summer','spring','weak_spring','chaos_spring']
 REVERSION_TRACKS = ['autumn','weak_autumn','chaos_autumn','winter']
@@ -247,6 +239,37 @@ class BacktestEngineV2:
         self._load_data()
         self._init_season_engine()
         self.scorer = V133dScorer(self.kline, self.tech, self.is_st)
+        self._load_strategy_params()
+        
+    def _load_strategy_params(self):
+        """从strategy_config表动态加载生产参数"""
+        global SEASON_PARAMS, SEASON_PARAMS_LOADED
+        if SEASON_PARAMS_LOADED:
+            return
+        conn = pymysql.connect(**DB_CFG)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT season_type, buy_min_score, max_hold_days, stop_loss_pct,
+                   trailing_stop_pct, max_pos_pct, max_total_pct
+            FROM strategy_config 
+            WHERE is_active=1 AND strategy_type='STEP_LOCK'
+        """)
+        for r in cur.fetchall():
+            st = r['season_type']
+            buy_min = int(r['buy_min_score'])
+            hold = int(r['max_hold_days'])
+            t1 = float(r['stop_loss_pct'])
+            trail = float(r['trailing_stop_pct'])
+            mp = float(r['max_pos_pct'])
+            mt = float(r['max_total_pct'])
+            # 回测中t2 = t1 - 2（比T1宽松2个百分点）
+            t2 = max(3.0, t1 - 2.0)
+            SEASON_PARAMS[st] = {'buy':buy_min, 'hold':hold, 
+                                 't1':t1, 't2':t2, 'trail':trail,
+                                 'mp':mp, 'mt':mt}
+        cur.close(); conn.close()
+        print(f"  ✅ 策略参数已从DB加载: {len(SEASON_PARAMS)}个季节")
+        SEASON_PARAMS_LOADED = True
         
     def _load_data(self):
         """预加载所有数据到内存"""
@@ -374,11 +397,14 @@ class BacktestEngineV2:
             return (dp[-1][1] - dp[-21][1]) / dp[-21][1]
         return default
     
-    def run(self):
+    def run(self, start_date=None, end_date=None):
         """主回测"""
+        days = [d for d in self.trading_days 
+                if (start_date is None or d >= start_date) 
+                and (end_date is None or d <= end_date)]
         print(f"\n{'='*60}")
         print(f"🚀 V13.3d 端到端真实回测 v2.0")
-        print(f"  范围: {self.trading_days[0]} ~ {self.trading_days[-1]}")
+        print(f"  范围: {days[0]} ~ {days[-1]} ({len(days)}天)")
         print(f"{'='*60}")
         
         cash = INIT_CAPITAL
@@ -394,7 +420,6 @@ class BacktestEngineV2:
         
         last_sell_date = {}  # T+1
         
-        days = self.trading_days
         N = len(days)
         
         for idx, td in enumerate(days):
@@ -603,5 +628,13 @@ class BacktestEngineV2:
 
 
 if __name__ == '__main__':
+    import sys as _sys
+    start = _sys.argv[1] if len(_sys.argv) > 1 else '2024-09-02'
+    end = _sys.argv[2] if len(_sys.argv) > 2 else '2026-07-17'
     eng = BacktestEngineV2()
-    eng.run()
+    # 覆盖交易日范围
+    # 回测筛选在run()中通过trading_days过滤（主循环只遍历范围内的日）
+    # __init__仍加载全量数据，但run()范围由参数控制
+    # 目前run()里直接用了self.trading_days（全量）
+    # 需要改run()方法支持参数
+    eng.run(start, end)
