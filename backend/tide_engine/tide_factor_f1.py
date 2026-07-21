@@ -32,5 +32,6 @@ def compute(ts_code: str, trade_date: str) -> float:
         # 归一化: 0.015 ~= 1分
         score = max(-5.0, min(5.0, accel / 0.015))
         return round(score, 2)
-    except:
+    except Exception as e:
+        print(f"  ⚠️ tid(tide_factor_f1.py) factor error: {e}")
         return 0.0

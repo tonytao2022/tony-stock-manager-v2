@@ -43,6 +43,6 @@ def get_config_bool(key: str, default: bool = True) -> bool:
         cur.close(); conn.close()
         if row:
             return row['config_value'].lower() in ('true', '1', 'yes')
-    except:
-        pass
+    except Exception as e:
+        pass  # 非关键：配置读取失败，使用默认值
     return default

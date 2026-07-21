@@ -53,5 +53,6 @@ def compute(ts_code: str, trade_date: str) -> float:
         # raw=1.5 → 3分, raw=3.0 → 5分
         score = min(5.0, raw / 0.6)
         return round(score, 2)
-    except:
+    except Exception as e:
+        print(f"  ⚠️ tid(tide_factor_f4.py) factor error: {e}")
         return 0.0

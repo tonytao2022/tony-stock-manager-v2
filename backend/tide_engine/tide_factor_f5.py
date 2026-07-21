@@ -47,5 +47,6 @@ def compute(ts_code: str, trade_date: str) -> float:
         r = cov / (math.sqrt(var_p) * math.sqrt(var_v))
         score = max(-5.0, min(5.0, r * 5.0))
         return round(score, 2)
-    except:
+    except Exception as e:
+        print(f"  ⚠️ tid(tide_factor_f5.py) factor error: {e}")
         return 0.0

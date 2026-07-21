@@ -183,7 +183,8 @@ def _calc_capital_inertia(ts_code: str, trade_date: str, cur=None) -> float:
                     score = max(0, score - 5)
         
         return max(0, min(100, score))
-    except:
+    except Exception as e:
+        print(f"  ⚠️ short_term_filter calc failed: {e}")
         return 50
     finally:
         if need_close:
@@ -339,6 +340,7 @@ def batch_short_term_score(ts_codes: list, trade_date: str) -> dict:
         try:
             r = calc_short_term_score(code, trade_date)
             results[code] = r
-        except:
+        except Exception as e:
+            print(f"  ⚠️ {code} short_term 评分失败: {e}")
             results[code] = _neutral()
     return results

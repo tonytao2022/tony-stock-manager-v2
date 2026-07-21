@@ -59,5 +59,6 @@ def compute(ts_code: str, trade_date: str) -> float:
         raw = adx / 100 * 10 * direction
         score = max(-5.0, min(5.0, raw))
         return round(score, 2)
-    except:
+    except Exception as e:
+        print(f"  ⚠️ tid(tide_factor_f6.py) factor error: {e}")
         return 0.0

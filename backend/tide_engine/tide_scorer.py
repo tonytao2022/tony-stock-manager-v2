@@ -63,7 +63,8 @@ def _get_season(trade_date: str) -> str:
         row = cur.fetchone()
         cur.close(); conn.close()
         if row: return row['market_season']
-    except:
+    except Exception as e:
+        print(f"  ⚠️ tide scorer season查询失败(将用默认summer): {e}")
         pass
     return 'summer'
 
