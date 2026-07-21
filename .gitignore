@@ -12,3 +12,4 @@ build/
 db_backup/*.sql.gz
 venv/
 node_modules/
+*.bak.*
