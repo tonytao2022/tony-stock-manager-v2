@@ -75,7 +75,9 @@ def _record_penalty(ts_code: str, trade_date, track: str, reasons: list, total_p
         conn.close()
     except Exception as e:
         # penalty_log 是辅助信息, 不能因为写入失败影响主流程
-        pass
+        import logging
+        logging.getLogger(__name__).warning(
+            f'[penalty_log] 写入失败(ts_code={ts_code}, trade_date={now_val}): {e}')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from season_engine import SeasonEngine

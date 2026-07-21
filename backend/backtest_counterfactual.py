@@ -14,6 +14,16 @@
 
 评分数据是固化的——我们不改评分引擎，只改买入决策逻辑。
 
+⚠️ 已知限制：
+1. 过滤层历史数据缺失 — strategy_signal 表没有 is_filtered 标志位。
+   当前 no_filters 配置无法验证（与full结果一致），因为评分在入场前
+   已经过过滤，反事实框架无法从历史数据中重建被过滤掉的有效信号。
+2. 过滤层重建偏差 — 从 daily_kline 重建量比判断可能与线上流程不一致
+   （线上 _calc_vol_ratio() 在K线不足时会回退到1.0）。
+   详见反事实框架中 _apply_filters() 的实现。
+3. 此为观察性统计，不保证因果关系（Delta Diagnostics 的交互效应
+   结论是数据倾向性的统计描述，非因果推断）。
+
 用法:
   python3 backtest_counterfactual.py [start_date] [end_date]
   e.g., python3 backtest_counterfactual.py 2024-09-02 2026-07-17
@@ -28,7 +38,6 @@ DB_CFG = {'host':'127.0.0.1','port':3306,'user':'debian-sys-maint',
           'password':'iXve1rVBXfdA4tL9','database':'stock_db_v2',
           'charset':'utf8mb4','cursorclass':pymysql.cursors.DictCursor,
           'read_timeout':300,'write_timeout':300}
-
 INIT_CAPITAL = 1_000_000
 MAX_POSITIONS = 8
 MAX_BUY_PER_DAY = 3
