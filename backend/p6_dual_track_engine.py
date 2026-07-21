@@ -12,7 +12,7 @@ P6 分季评分双轨引擎 v1.0
   ┃   缠论趋势分×0.7 + 动量因子×0.3
   ┃   P3信号基於轨道排序
   ┗━ 轨道B: 均值回归评分 (秋季/冬季/混沌*)
-       缠论结构×0.40 + 超跌深度×0.25 + ATR波动×0.10 + 资金因子×0.15 + 秋老虎+10分
+       缠论结构×0.40 + 超跌深度×0.25 + ATR波动×0.10 + 资金因子×0.15 + 秋老虎+15分
        P3信号基於轨道排序
 
   V4: 动量权重从70/30改为50/25/25(缠论/动量/资金), 回归加入资金因子
@@ -331,7 +331,10 @@ def _calc_margin_score(ts_code: str, trade_date_str: str) -> float:
 def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
     """
     动量轨道评分
-    V5权重: 趋势×0.30 + 位置×0.10 + 结构×0.10 + 动量×0.25 + 资金×0.15 + 融资×0.10 = 100%
+    V13.3e (2026-07-20 MAY+Main联合调优) 权重:
+    趋势×0.30 + 位置×0.08 + 结构×0.12 + 动量×0.30 + 资金×0.20 = 100%
+    移除融资因子(僵尸因子,大部分票无数据退化为50分常量)
+    结构分从5%提至12%, 动量从25%提至30%, 资金从15%提至20%
     
     Returns:
         {'track': 'momentum', 'score': float, 'details': {...}}
@@ -473,7 +476,7 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
             if ma20 > 0 and close_price < ma20:
                 below_ma20 = (ma20 - close_price) / ma20
                 original_trend = trend_score
-                discount = max(0.4, 1.0 - below_ma20 * 0.6)  # V13.3b: 打折更狠
+                discount = max(0.6, 1.0 - below_ma20 * 0.5)  # V13.3b: 打折更狠
                 trend_score = int(original_trend * discount)
                 if trend_score != original_trend:
                     tloss = (original_trend - trend_score) * 0.30
@@ -483,20 +486,20 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
 
             # ─── 空头排列检查（V13.3b: +8分）───
             if ma5 > 0 and ma20 > 0 and close_price < ma5 and ma5 < ma20:
-                penalty_score += 8
-                penalty_reason.append('空头排列+8')
+                penalty_score += 5
+                penalty_reason.append('空头排列+5')
 
             # ─── 跌幅惩罚（V13.3b: 阈值更宽, 上限更高）───
             if r5 < -0.05:  # 5日跌超5%
-                p = min(25, int(abs(r5) * 180))
+                p = min(15, int(abs(r5) * 180))
                 penalty_score += p
                 penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
             if r10 < -0.08:  # 10日跌超8%
-                p = min(20, int(abs(r10) * 120))
+                p = min(15, int(abs(r10) * 120))
                 penalty_score += p
                 penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
             if r20_ret < -0.10:  # 20日跌超10%
-                p = min(25, int(abs(r20_ret) * 100))
+                p = min(15, int(abs(r20_ret) * 100))
                 penalty_score += p
                 penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-{p}')
 
@@ -504,8 +507,9 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
         details['penalty_reason'] = ';'.join(penalty_reason) if penalty_reason else '无'
 
         # 7. 综合（扣除惩罚分）
-        final_score = (trend_score * 0.30 + pos_score * 0.10 + structure_score * 0.10 +
-                       momentum * 0.25 + mf_score * 0.15 + margin_score * 0.10)
+        # V13.3e权重: 趋势30% + 位置8% + 结构12% + 动量30% + 资金20%
+        final_score = (trend_score * 0.30 + pos_score * 0.08 + structure_score * 0.12 +
+                       momentum * 0.30 + mf_score * 0.20)
         final_score = max(0, min(100, round(final_score - penalty_score, 1)))
 
         details['final_raw'] = round(final_score + penalty_score, 1)
@@ -703,7 +707,7 @@ def track_reversion(ts_code: str, ctx: MarketContext) -> Dict:
         details['vol_ratio'] = _calc_vol_ratio(ts_code, ctx.trade_date)
         
         # ===== 综合 =====
-        # V4权重: 缠论×0.40 + 超跌×0.25 + ATR×0.10 + 资金×0.15 + 秋老虎+10
+        # V4权重: 缠论×0.40 + 超跌×0.25 + ATR×0.10 + 资金×0.15 + 秋老虎+15
         final_score = structure * 0.40 + oversold * 0.25 + volatility * 0.10 + mf_score * 0.15
         
         # 秋老虎: 已经从structure中移除，单独加10分
@@ -735,7 +739,7 @@ def track_reversion(ts_code: str, ctx: MarketContext) -> Dict:
             # 破MA20
             if ma20_c > 0 and close_price < ma20_c:
                 below_ma20 = (ma20_c - close_price) / ma20_c
-                discount = max(0.4, 1.0 - below_ma20 * 0.6)
+                discount = max(0.6, 1.0 - below_ma20 * 0.5)
                 if discount < 1.0:
                     tloss = 55 * (1 - discount) * 0.40
                     if tloss > 2:
@@ -743,19 +747,19 @@ def track_reversion(ts_code: str, ctx: MarketContext) -> Dict:
                         penalty_reason.append(f'破MA20-{round(tloss,1)}')
             # 空头排列
             if ma5_c > 0 and ma20_c > 0 and close_price < ma5_c and ma5_c < ma20_c:
-                penalty_score += 8
-                penalty_reason.append('空头排列+8')
+                penalty_score += 5
+                penalty_reason.append('空头排列+5')
             # 跌幅惩罚
             if r5 < -0.05:
-                p = min(25, int(abs(r5) * 180))
+                p = min(15, int(abs(r5) * 180))
                 penalty_score += p
                 penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
             if r10 < -0.08:
-                p = min(20, int(abs(r10) * 120))
+                p = min(15, int(abs(r10) * 120))
                 penalty_score += p
                 penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
             if r20 < -0.10:
-                p = min(25, int(abs(r20) * 100))
+                p = min(15, int(abs(r20) * 100))
                 penalty_score += p
                 penalty_reason.append(f'20日跌{r20*100:.0f}%-{p}')
 
@@ -1200,11 +1204,11 @@ def daily_pipeline(mode: str = 'watch_pool'):
                     (ts_code, trade_date, track, composite_score, calibrated_score,
                      scoring_strategy, direction, operation_mode, buy_sell_point,
                      reason_chain, signal_confidence, autumn_tiger, tiger_confidence,
-                     hengjiyuan_level,
+                     hengjiyuan_level, season,
                      penalty_score, penalty_reason,
                      short_term_score, stf_capital, stf_volume, stf_overbought, stf_momentum)
                 VALUES (%s, %s, %s, %s, %s, %s, 'dual_track_v1', %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     track=VALUES(track), composite_score=VALUES(composite_score),
                     calibrated_score=VALUES(calibrated_score),
@@ -1216,6 +1220,7 @@ def daily_pipeline(mode: str = 'watch_pool'):
                     autumn_tiger=VALUES(autumn_tiger),
                     tiger_confidence=VALUES(tiger_confidence),
                     hengjiyuan_level=VALUES(hengjiyuan_level),
+                    season=VALUES(season),
                     penalty_score=VALUES(penalty_score),
                     penalty_reason=VALUES(penalty_reason),
                     short_term_score=VALUES(short_term_score),
@@ -1227,6 +1232,7 @@ def daily_pipeline(mode: str = 'watch_pool'):
                   op_mode, bs, reason, sig_conf,
                   autumn, tiger_conf,
                   ctx.raw.get('hengjiyuan_level', 'weak_heng'),
+                  ctx.season,
                   p_score, p_reason,
                   stf_score, stf_capital, stf_volume, stf_overbought, stf_momentum))
             saved += 1

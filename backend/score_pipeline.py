@@ -368,4 +368,52 @@ except Exception as e:
     print('  ⚠️ [V13.3d] 后处理层失败: %s' % str(e)[:80])
     import traceback; traceback.print_exc()
 
+# ============================================================
+# [season同步] 用season_state的个股板块映射补填strategy_signal.season
+# ============================================================
+try:
+    print('🌍 [season] 同步个股板块季节到strategy_signal.season...')
+    conn_season = pymysql.connect(**DB)
+    cur_season = conn_season.cursor()
+    
+    # 先写个股板块映射临时表
+    cur_season.execute("DROP TABLE IF EXISTS tmp_season_map")
+    cur_season.execute("""
+        CREATE TABLE tmp_season_map (
+            ts_code VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL PRIMARY KEY,
+            index_code VARCHAR(20) NOT NULL
+        ) ENGINE=MEMORY
+    """)
+    cur_season.execute("""
+        INSERT INTO tmp_season_map (ts_code, index_code)
+        SELECT sb.ts_code,
+          CASE 
+            WHEN RIGHT(sb.ts_code, 3) = '.SH' AND sb.market = '科创板' THEN '000688.SH'
+            WHEN RIGHT(sb.ts_code, 3) = '.SH' THEN '000001.SH'
+            WHEN RIGHT(sb.ts_code, 3) = '.SZ' AND sb.market = '创业板' THEN '399006.SZ'
+            WHEN RIGHT(sb.ts_code, 3) = '.SZ' THEN '399001.SZ'
+            ELSE 'MARKET'
+          END
+        FROM stock_basic sb WHERE sb.is_active = 1
+    """)
+    
+    # 更新season
+    cur_season.execute("""
+        UPDATE strategy_signal ss
+        JOIN tmp_season_map m ON ss.ts_code = m.ts_code
+        JOIN season_state sst ON m.index_code = sst.index_code AND ss.trade_date = sst.trade_date
+        SET ss.season = sst.season
+        WHERE ss.trade_date = %s AND (ss.season IS NULL OR ss.season != sst.season)
+    """, (str(ctx.trade_date),))
+    updated = cur_season.rowcount
+    cur_season.execute("DROP TABLE IF EXISTS tmp_season_map")
+    cur_season.close()
+    conn_season.close()
+    if updated > 0:
+        print(f'  ✅ season同步: {updated}只个股季节已更新（个股板块级）')
+    else:
+        print(f'  ✅ season同步: 无需更新')
+except Exception as e:
+    print('  ⚠️ [season] 同步失败: %s' % str(e)[:100])
+
 print('📦 [V13.3d] 评分管道完成 ✅')

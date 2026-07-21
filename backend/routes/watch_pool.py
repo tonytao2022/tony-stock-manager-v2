@@ -174,7 +174,7 @@ def watch_pool_score_list():
                        ss.operation_mode, ss.is_filtered, ss.filter_reason
                 FROM watch_pool wp
                 LEFT JOIN stock_basic sb ON wp.ts_code = sb.ts_code
-                LEFT JOIN strategy_signal ss ON wp.ts_code = ss.ts_code AND ss.trade_date = %s
+                LEFT JOIN strategy_signal ss ON wp.ts_code = ss.ts_code COLLATE utf8mb4_unicode_ci AND ss.trade_date = %s
                 LEFT JOIN daily_kline_qfq dk ON wp.ts_code = dk.ts_code AND dk.trade_date = %s
                 WHERE wp.is_active=1 {where_extra}
                 ORDER BY ss.calibrated_score DESC, ss.composite_score DESC, wp.name ASC

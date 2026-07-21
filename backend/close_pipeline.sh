@@ -434,4 +434,74 @@ c.close(); conn.close()
 print(f'  监控池快照: {cnt}条已刷新 ({td}) ✅', flush=True)
 PYEOF10
 
+# [11/9] 策略评估（仓检查点评估、买卖信号）
+printf '  [11/9] 策略评估(step_strategy_engine)...\n' >> $LOG
+# 从strategy_signal获取最新交易日
+SKIP_REALTIME=1 python3 << 'PYEOF11' >> $LOG 2>&1
+import sys; sys.path.insert(0, '.')
+from datetime import datetime, date
+from db_config import get_connection
+from step_strategy_engine import load_strategy_configs, evaluate_strategy, save_results
+
+conn = get_connection()
+c = conn.cursor()
+c.execute('SELECT MAX(trade_date) FROM strategy_signal')
+td = str(c.fetchone()['MAX(trade_date)'] or '')
+c.close()
+
+if not td:
+    print('  ❌ 无最新交易日, 跳过策略评估')
+    sys.exit(1)
+
+print(f'  📊 策略评估 - {td}')
+
+strategies = load_strategy_configs()
+print(f'  活跃策略: {len(strategies)}个')
+
+for s in strategies:
+    print(f'  ▶ {s["name"]} (ID={s["id"]})')
+    
+    # 检查是否有当日评分
+    c2 = conn.cursor()
+    c2.execute("SELECT COUNT(*) FROM strategy_signal WHERE trade_date=%s", (td,))
+    p6_count = c2.fetchone()[0]
+    c2.close()
+    
+    if p6_count == 0:
+        print(f'    ❌ strategy_signal 无{td}日P6评分, 跳过')
+        continue
+    print(f'    P6评分源: {p6_count}条 ✅')
+    
+    results = evaluate_strategy(td, s)
+    print(f'    策略评估: {len(results)}只股票')
+    
+    n = save_results(conn, results)
+    print(f'    已写入strategy_signal_daily: {n}条')
+    
+    # 统计信号分布
+    from collections import defaultdict
+    actions = defaultdict(int)
+    holdings = 0
+    buy_signals = []
+    sell_signals = []
+    for r in results:
+        actions[r['action']] += 1
+        if r['holding_status'] == 'HOLDING':
+            holdings += 1
+            if r['action'] in ('SELL', 'STOP_LOSS'):
+                sell_signals.append(f"{r['name']}({r['action']}:{r['action_reason']})")
+        if r['action'] == 'BUY':
+            buy_signals.append(f"{r['name']}(评分{r['buy_score']})")
+    
+    print(f'    信号分布: {dict(actions)}')
+    print(f'    持仓中: {holdings}只')
+    if buy_signals:
+        print(f'    买入信号: {chr(10).join(buy_signals[:5])}')
+    if sell_signals:
+        print(f'    卖出信号: {chr(10).join(sell_signals[:5])}')
+
+conn.close()
+print(f'  ✅ 策略评估完成')
+PYEOF11
+
 echo "[$(date '+%H:%M:%S')] ✅ 收盘管道完成" >> $LOG
