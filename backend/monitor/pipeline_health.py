@@ -44,8 +44,8 @@ def check_penalty_effectiveness(days=5, threshold=0.5):
     if not daily_rows:
         return {'status': 'WARN', 'score': 30, 'message': '无足够数据评估', 'detail': {}}
     
-    avg_all = sum(r['avg_pts'] or 0 for r in daily_rows) / len(daily_rows)
-    zero_ratio = zero_count / len(daily_rows)
+    avg_all = float(sum(r['avg_pts'] or 0 for r in daily_rows)) / len(daily_rows)
+    zero_ratio = float(zero_count) / len(daily_rows)
     
     if avg_all < threshold:
         status = 'CRIT' if avg_all < threshold * 0.5 else 'WARN'
