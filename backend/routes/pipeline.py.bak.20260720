@@ -29,7 +29,7 @@ def pipeline_status():
                 pid = open(lock_file).read().strip()
                 if pid.isdigit() and os.path.isdir(f'/proc/{pid}'):
                     is_running = True
-            except Exception as e:
+            except:
                 pass
 
         return api_success({

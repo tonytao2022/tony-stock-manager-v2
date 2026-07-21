@@ -162,7 +162,7 @@ def api_keys():
                 })
             cur.close()
             conn.close()
-        except Exception as e:
+        except:
             pass
         return api_success({'keys': keys})
     except Exception as e:
@@ -211,7 +211,7 @@ def cron_status():
                 return {'last_run': mt.strftime('%Y-%m-%d %H:%M'), 'status': 'warn', 'status_label': '⚠️ 延迟', 'hours_ago': round(hours, 1)}
             else:
                 return {'last_run': mt.strftime('%Y-%m-%d %H:%M'), 'status': 'error', 'status_label': '❌ 异常', 'hours_ago': round(hours, 1)}
-        except Exception as e:
+        except:
             return {'last_run': '从未执行', 'status': 'not_run', 'status_label': '⏳ 未运行', 'hours_ago': 999}
 
     tasks.append({'id': 'pipeline', 'name': '📊 数据管道', 'description': '每日17:00 K线→评分→快照', **_mtime('/tmp/stock_pipeline_v2.log', 'pipeline')})

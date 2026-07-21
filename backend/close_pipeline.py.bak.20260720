@@ -98,7 +98,7 @@ if not rows:
             break
 
 log(f"拉取 {len(rows)}条")
-saved = 0; failed = 0
+saved = 0
 for r in rows:
     try:
         c.execute("""INSERT INTO daily_kline (ts_code,trade_date,open,high,low,close,pre_close,change_pct,vol,amount)
@@ -111,9 +111,8 @@ for r in rows:
              float(r.get('pre_close',0)or 0),float(r.get('pct_chg',0)or 0),
              float(r.get('vol',0)or 0),float(r.get('amount',0)or 0)))
         saved += 1
-    except Exception as e:
-        failed += 1
-log(f"✅ K线入库 {saved}条, ⚠️跳过{failed}条 (日期: {today_fmt})")
+    except: pass
+log(f"✅ K线入库 {saved}条 (日期: {today_fmt})")
 
 # ============================================================
 # Step 1: daily_basic（T+N回退）
@@ -126,7 +125,7 @@ if basic_dt and last_basic >= basic_dt:
 elif not rows_basic:
     log(f"daily_basic: 3天内无新数据")
 else:
-    saved_basic = 0; failed_basic = 0
+    saved_basic = 0
     for r in rows_basic:
         try:
             c.execute("""INSERT INTO daily_basic
@@ -155,8 +154,8 @@ else:
                  float(r.get('circ_mv',0)) if r.get('circ_mv') else None))
             saved_basic += 1
         except Exception as e:
-            failed_basic += 1
-    log(f"✅ daily_basic入库 {saved_basic}条, ⚠️跳过{failed_basic}条 ({basic_dt})")
+            pass
+    log(f"✅ daily_basic入库 {saved_basic}条 ({basic_dt})")
 
 # ============================================================
 # Step 2: moneyflow（T+N回退）
@@ -169,7 +168,7 @@ if mf_dt and last_mf >= mf_dt:
 elif not rows2:
     log(f"moneyflow: 3天内无新数据")
 else:
-    saved2 = 0; failed2 = 0
+    saved2 = 0
     for r in rows2:
         try:
             c.execute("""INSERT INTO moneyflow (ts_code,trade_date,net_mf_amount,buy_lg_amount,sell_lg_amount,buy_sm_amount,sell_sm_amount)
@@ -180,9 +179,8 @@ else:
                  float(r.get('buy_lg_amount',0)or 0),float(r.get('sell_lg_amount',0)or 0),
                  float(r.get('buy_sm_amount',0)or 0),float(r.get('sell_sm_amount',0)or 0)))
             saved2 += 1
-        except Exception as e:
-            failed2 += 1
-    log(f"✅ moneyflow入库 {saved2}条, ⚠️跳过{failed2}条 ({mf_dt})")
+        except: pass
+    log(f"✅ moneyflow入库 {saved2}条 ({mf_dt})")
 
 # ─── Step 3: 指数日线 ───
 print("[3/6] 指数日线...", flush=True)
@@ -231,7 +229,6 @@ try:
                 break
         if margin_df is not None and len(margin_df) > 0:
             saved = 0
-            failed_margin = 0
             for _, r in margin_df.iterrows():
                 try:
                     c4.execute('''INSERT IGNORE INTO margin_detail 
@@ -247,9 +244,8 @@ try:
                          float(r['rqmcl']) if r.get('rqmcl') else None,
                          float(r['rzrqye']) if r.get('rzrqye') else None))
                     saved += 1
-                except Exception as e:
-                    failed_margin += 1
-            log(f"✅ margin_detail入库 {saved}条, ⚠️跳过{failed_margin}条 ({margin_dt})")
+                except: pass
+            log(f"✅ margin_detail入库 {saved}条 ({margin_dt})")
         else:
             log("margin_detail: 最近3天无新数据（T+1后自动补入）")
     c4.close()
@@ -267,7 +263,7 @@ try:
         c5.execute('''SELECT ts_code, trade_date, close, pre_close, change_pct, vol, amount 
                      FROM daily_kline WHERE trade_date=%s''', (today_fmt,))
         rows5 = c5.fetchall()
-        saved5 = 0; failed5 = 0
+        saved5 = 0
         for r in rows5:
             try:
                 c5.execute('''INSERT IGNORE INTO daily_kline_qfq 
@@ -277,9 +273,8 @@ try:
                      float(r['pre_close'] or 0), float(r['change_pct'] or 0),
                      int(r['vol'] or 0), float(r['amount'] or 0)))
                 saved5 += 1
-            except Exception as e:
-                failed5 += 1
-        log(f"✅ daily_kline_qfq入库 {saved5}条, ⚠️跳过{failed5}条")
+            except: pass
+        log(f"✅ daily_kline_qfq入库 {saved5}条")
     c5.close()
 except Exception as e:
     log(f"daily_kline_qfq: {e}")

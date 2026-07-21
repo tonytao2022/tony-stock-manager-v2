@@ -58,7 +58,7 @@ def _fetch_stock_data(ts_code):
         tushare_token = _row[0] if _row else ''
         _cur.close()
         _conn.close()
-    except Exception as e:
+    except:
         tushare_token = os.environ.get('TUSHARE_TOKEN', '')
 
     import tushare as ts
@@ -80,7 +80,7 @@ def _fetch_stock_data(ts_code):
             result['area'] = '未知'
             result['market'] = '未知'
             result['list_date'] = '未知'
-    except Exception as e:
+    except:
         # 降级到本地数据库
         with db_cursor(commit=False) as cur:
             cur.execute("SELECT name, industry, area, market FROM stock_basic WHERE ts_code=%s LIMIT 1", (ts_code,))
@@ -120,7 +120,7 @@ def _fetch_stock_data(ts_code):
             result['change'] = '未知'
             result['volume'] = '未知'
             result['amount'] = '未知'
-    except Exception as e:
+    except:
         result['daily_data'] = '无数据'
         result['price'] = '未知'
         result['change'] = '未知'
@@ -149,7 +149,7 @@ def _fetch_stock_data(ts_code):
                 result['pe'] = '未知'
                 result['pb'] = '未知'
                 result['total_mv'] = '未知'
-    except Exception as e:
+    except:
         result['pe'] = '未知'
         result['pb'] = '未知'
         result['total_mv'] = '未知'

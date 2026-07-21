@@ -82,7 +82,7 @@ def load_scores_by_day(conn, start_date, end_date):
                 'close': float(r['close'] or 0),
             }
             cnt += 1
-        except:
+        except Exception as e:
             pass
     c.close()
     print(f"  ✓ 加载 {cnt} 条评分数据")

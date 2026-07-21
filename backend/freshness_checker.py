@@ -59,7 +59,8 @@ if need_fix:
                 """, (r['ts_code'],today,float(r.get('close',0)),float(r.get('pre_close',0)),
                       float(r.get('pct_chg',0)),int(r.get('vol',0)or 0),float(r.get('amount',0)or 0)))
                 saved += 1
-            except: pass
+            except Exception as e:
+                pass  # 单条插入失败跳过
         print('    ✅ K线入库 %d条' % saved)
     
     # 补拉资金流向
@@ -79,7 +80,8 @@ if need_fix:
                 """, (r['ts_code'],today_int,float(r.get('net_mf_amount',0)),
                       float(r.get('buy_lg_amount',0)),float(r.get('sell_lg_amount',0))))
                 saved += 1
-            except: pass
+            except Exception as e:
+                pass  # 单条插入失败跳过
         print('    ✅ 资金流向入库 %d条' % saved)
     
     # 补拉评分
@@ -115,7 +117,8 @@ if need_fix:
                       float(ding.get('pos_score',0)),float(ding.get('mf_score',0)),
                       float(ding.get('margin_score',0)),float(ding.get('vol_ratio',0))))
                 saved += 1
-            except: pass
+            except Exception as e:
+                pass  # 单条插入失败跳过
         print('    ✅ 评分入库 %d只' % saved)
 
 cur.close()

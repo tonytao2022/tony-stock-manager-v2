@@ -47,7 +47,7 @@ def parse_batch_response(text):
                 idx = 20 + i * 2
                 results[code]['sell_volumes'].append(
                     int(float(parts[idx])) if len(parts) > idx and parts[idx] else 0)
-        except Exception as e:
+        except:
             continue
     return results
 
@@ -172,8 +172,8 @@ def run_check():
                 print(f"  🧹 清空{cur.rowcount}条过期信号", flush=True)
             cur.close()
             conn.close()
-        except Exception as e:
-            print(f"  ⚠️ 清理过期信号失败: {e}", flush=True)
+        except:
+            pass
     
     # 根据分钟奇偶决定本批次：偶数分钟→批次A(索引0)，奇数分钟→批次B(索引1)
     batch_idx = minute % 2  # 0或1
@@ -291,8 +291,8 @@ def run_polling(interval_min=30):
             print(f"  🧹 清空{cur.rowcount}条过期信号", flush=True)
         cur.close()
         conn.close()
-    except Exception as e:
-        print(f"  ⚠️ 启动时清理过期信号失败: {e}", flush=True)
+    except:
+        pass
     
     print(f"🚀 Watchdog V2 启动 | 全池620只分2批轮询, 等效15分钟全扫一轮", flush=True)
     

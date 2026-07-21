@@ -131,7 +131,7 @@ def load_day_scores(conn, td):
                 'mf': float(r['mf_score'] or 50),
                 'close': float(r['close_price'] or 0),
             }
-        except:
+        except Exception as e:
             pass
     c.close()
     return scores

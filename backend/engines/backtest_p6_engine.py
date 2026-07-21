@@ -136,7 +136,7 @@ def _backtest_single_stock(ts_code, start_date, end_date, p):
         # 回滚季节判断（确保季节数据与当前交易日一致）
         try:
             detect_season(trade_date)
-        except:
+        except Exception as e:
             pass
         score_result = _score_single_stock(ts_code, trade_date)
         if not score_result:

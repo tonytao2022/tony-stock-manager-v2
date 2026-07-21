@@ -438,7 +438,9 @@ PYEOF10
 printf '  [11/9] 策略评估(step_strategy_engine)...\n' >> $LOG
 # 从strategy_signal获取最新交易日
 SKIP_REALTIME=1 python3 << 'PYEOF11' >> $LOG 2>&1
-import sys; sys.path.insert(0, '.')
+import sys
+sys.path.insert(0, '.')
+sys.path.insert(0, '/opt/stock-analyzer')
 from datetime import datetime, date
 from db_config import get_connection
 from step_strategy_engine import load_strategy_configs, evaluate_strategy, save_results

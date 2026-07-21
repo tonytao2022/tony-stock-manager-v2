@@ -156,7 +156,7 @@ def get_user_id():
         if r:
             v = r['config_value'] if isinstance(r, dict) else r[0]
             if v: return v
-    except:
+    except Exception as e:
         pass
     return get_default_user()
 

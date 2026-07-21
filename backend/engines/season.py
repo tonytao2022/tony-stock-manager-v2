@@ -186,7 +186,7 @@ def _default_season(trade_date):
                   result['confidence'], result['position_advice'],
                   result['hengjiyuan_level'], result['hengjiyuan_score'],
                   result['confidence_mult']))
-    except:
+    except Exception as e:
         pass
     return result
 

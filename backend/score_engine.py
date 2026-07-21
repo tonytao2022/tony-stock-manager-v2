@@ -392,7 +392,8 @@ class ScoreEngineV4:
             if _r2 and _r2[0]:
                 _latest_td = str(_r2[0])
             _c2.close()
-        except: pass
+        except Exception as e:
+            pass
         if len(rows) < 120 or (rows and str(rows[-1]['trade_date']) < _latest_td):
             cur.execute("SELECT trade_date,high,low,close,vol,change_pct FROM daily_kline WHERE ts_code=%s ORDER BY trade_date ASC",(ts_code,))
             rows2=cur.fetchall()
@@ -487,7 +488,8 @@ class ScoreEngineV4:
                     tc_boll=(closes[-1]-b_mid)/((b_up-b_low)/2) if (b_up-b_low)>0 else 0
                 tc_kdj=float(_r2.get('kdj_j',50)or 50)
             _cur.close()
-        except: pass
+        except Exception as e:
+            pass
         sentiment=score_sentiment(mkt['breadth_ratio'],vol_reg,r14,chgs[-1] if chgs else 0,
             money_flow_net=mf_net, money_flow_lg=mf_lg, money_flow_elg=mf_elg,
             tech_macd_bar=tc_macd, tech_boll_pos=tc_boll, tech_kdj_j=tc_kdj)
@@ -709,7 +711,7 @@ class ScoreEngineV4:
                                 tiger_conf_val = float(_ct_row['tiger_confidence'] or 0)
                                 tiger_reasons_str = str(_ct_row['tiger_reasons'] or '')[:200]
                             _ct_cur.close()
-                        except:
+                        except Exception as e:
                             pass
 
                         # ═══ 安全闸门判定 ═══
@@ -728,7 +730,8 @@ class ScoreEngineV4:
                             for _r3 in _cur3.fetchall():
                                 _sc[_r3[0]] = _r3[1]
                             _cur3.close()
-                        except: pass
+                        except Exception as e:
+                            pass  # 非关键：system_config读取失败，用默认季节参数
                         _season_map = {
                             'summer':       ('summer',       'momentum'),
                             'spring':       ('spring',       'momentum'),

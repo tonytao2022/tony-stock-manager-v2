@@ -19,13 +19,13 @@ def system_health():
         with db_cursor(commit=False) as cur:
             cur.execute("SELECT 1")
             db_ok = True
-    except Exception as e:
+    except:
         db_ok = False
     try:
         disk = subprocess.run(['df', '-h', '/'], capture_output=True, text=True, timeout=3)
         dp = disk.stdout.split('\n')[1].split() if disk.stdout else [''] * 6
         disk_usage = dp[4] if len(dp) > 4 else '?'
-    except Exception as e:
+    except:
         disk_usage = '?'
     return api_success({
         'status': 'running', 'port': 8891, 'service': 'stock-system-v2',

@@ -40,7 +40,8 @@ def acquire_lock():
             if pid.isdigit() and os.path.isdir(f'/proc/{pid}'):
                 logger.warning(f'管道已在运行 (PID={pid})，跳过')
                 return False
-        except:
+        except Exception as e:
+            # LOCK_FILE不存在或不可读，正常情况
             pass
     with open(LOCK_FILE, 'w') as f:
         f.write(str(os.getpid()))
@@ -69,8 +70,8 @@ def run():
                 VALUES (%s, 'init', 'running', NOW())
             """, [pipeline_name])
             log_id = cur.lastrowid
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f'写初始化管道日志失败(非关键): {e}')
 
     results = []
 
@@ -120,8 +121,8 @@ def run():
                                 NOW(), %s, %s)
                     """, [pipeline_name, step['name'], step_status, duration,
                           duration, error_msg])
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f'写管道执行日志失败(非关键): {e}')
 
         results.append({
             'step': step['name'],
@@ -267,7 +268,8 @@ def _step_moneyflow(trade_date):
         # 字段索引
         def fi(name):
             try: return fields.index(name)
-            except: return -1
+            except Exception as e:
+                return -1
         idx_ts = fi('ts_code')
         idx_td = fi('trade_date')
         idx_nm = fi('net_mf_amount')
@@ -292,7 +294,7 @@ def _step_moneyflow(trade_date):
                     sel = float(item[idx_sel]) if idx_sel >= 0 else 0
                     bs = float(item[idx_bs]) if idx_bs >= 0 else 0
                     ss = float(item[idx_ss]) if idx_ss >= 0 else 0
-                except:
+                except Exception as e:
                     continue
                 
                 # 写入moneyflow表（保留全字段给评分引擎）
@@ -306,7 +308,8 @@ def _step_moneyflow(trade_date):
                             buy_elg_amount=VALUES(buy_elg_amount), sell_elg_amount=VALUES(sell_elg_amount)
                     """, (tc, tdate, nm, bl, sl, bs, ss, bel, sel))
                     saved_mf += 1
-                except: pass
+                except Exception as e:
+                    pass  # 单条写入失败，继续下一条
                 
                 # 写入money_flow表（精简字段给其他模块）
                 try:
@@ -322,7 +325,8 @@ def _step_moneyflow(trade_date):
                             buy_value=VALUES(buy_value), sell_value=VALUES(sell_value), net_value=VALUES(net_value)
                     """, (tc, tdate, main_net, retail_net, total_buy, total_sell, net_val))
                     saved_flow += 1
-                except: pass
+                except Exception as e:
+                    pass  # 单条写入失败，继续下一条
         
         logger.info(f'[MoneyFlow] moneyflow入库{saved_mf}条, money_flow入库{saved_flow}条')
     except Exception as e:

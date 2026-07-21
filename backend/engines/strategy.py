@@ -118,7 +118,7 @@ def _determine_checkpoint(hold_days):
             )
             rows = cur.fetchall()
             config = {r['config_key']: int(float(r['config_value'])) for r in rows}
-    except:
+    except Exception as e:
         config = {'p1_check_day': 5, 'p2_check_day': 15, 'p3_check_day': 25, 'p4_close_day': 30}
 
     if hold_days >= config.get('p4_close_day', 30):
@@ -145,7 +145,7 @@ def _determine_action(hold_days, profit_pct, cost_price, current_price):
             )
             rows = cur.fetchall()
             config = {r['config_key']: float(r['config_value']) for r in rows}
-    except:
+    except Exception as e:
         config = {'trailing_stop_pct': 15.0, 'stop_loss_pct': -10.0,
                   'p4_close_day': 30, 'max_hold_days': 30}
 

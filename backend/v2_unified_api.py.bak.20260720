@@ -125,8 +125,7 @@ def signals():
         for k in ['composite_score','calibrated_score','raw_score','trend_score','momentum_score','structure_score','emotion_score','tiger_confidence','position_pct']:
             if k in s and s[k] is not None:
                 try: s[k] = float(s[k])
-                except Exception as e:
-                    pass
+                except: pass
     return ok({'trade_date': td, 'total': total, 'page': page, 'page_size': page_size, 'count': len(sigs), 'signals': sigs})
 
 @app.route('/api/v2/strategy/checkpoints')
@@ -275,8 +274,7 @@ def holdings():
         for k in ['cost_price','current_price','profit_pct','profit_amount','market_value','position_ratio','score']:
             if k in r and r[k] is not None:
                 try: r[k] = float(r[k])
-                except Exception as e:
-                    pass
+                except: pass
         # 用K线最新收盘价覆盖current_price，重新计算market_value和profit
         kline_price = r.get('current_price')  # 来自daily_kline_qfq
         cp = float(r.get('cost_price') or 0)
@@ -307,7 +305,7 @@ def add_holding():
         try:
             from trade_manager import sync_to_portfolio
             sync_to_portfolio(ts_code, None)
-        except Exception as e:
+        except:
             pass
         return ok({'status': 'ok', 'ts_code': ts_code})
     except Exception as e:
@@ -509,7 +507,7 @@ def api_keys():
             _m = _rr.search(r'password\s*=\s*(\S+)', _c)
             if _m:
                 _pwd2 = _m.group(1)
-        except Exception as e:
+        except:
             pass
         if not _pwd2:
             return ok({"keys": [], "error": "无法读取数据库密码"})
@@ -543,7 +541,7 @@ def api_key_detail(key_id):
             _m = _rr.search(r'password\s*=\s*(\S+)', _c)
             if _m:
                 _pwd2 = _m.group(1)
-        except Exception as e:
+        except:
             pass
         if not _pwd2:
             return ok({"api_key": None, "error": "无法读取数据库密码"})
@@ -712,8 +710,7 @@ def watch_pool_batch():
         try:
             cu.execute("INSERT IGNORE INTO watch_pool (ts_code, name, 1=1) VALUES (%s, %s, 1)", (code, nm))
             added += 1
-        except Exception as e:
-            pass
+        except: pass
     c.commit(); cu.close(); c.close()
     return ok({'added': added})
 
@@ -782,8 +779,7 @@ def backtest_pool_batch():
         try:
             cu.execute("INSERT IGNORE INTO backtest_pool (ts_code, name, 1=1) VALUES (%s, %s, 1)", (code, nm))
             added += 1
-        except Exception as e:
-            pass
+        except: pass
     c.commit(); cu.close(); c.close()
     return ok({'added': added})
 

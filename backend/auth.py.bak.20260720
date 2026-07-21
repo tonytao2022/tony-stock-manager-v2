@@ -34,7 +34,7 @@ def _get_api_key():
                 _api_key_cache['key'] = key
                 _api_key_cache['time'] = now
                 return key
-    except Exception as e:
+    except:
         pass
     return os.environ.get('API_KEY', '')
 
@@ -57,7 +57,7 @@ def verify_login(username, password):
                     'role': row.get('role', 'user'),
                     'display_name': row.get('display_name', username),
                 }
-    except Exception as e:
+    except:
         pass
     return None
 
@@ -94,7 +94,7 @@ def jwt_decode(token):
         if parts[2] != expected_sig:
             return None
         return payload
-    except Exception as e:
+    except:
         return None
 
 

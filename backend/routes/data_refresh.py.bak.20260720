@@ -94,8 +94,7 @@ def refresh_tech():
             try:
                 cu2.execute("INSERT INTO technical_indicator(ts_code,trade_date,ma_5,ma_10,ma_20,ma_60,ma_120,ma_250,rsi_12,rsi_14,volume_ratio)VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)ON DUPLICATE KEY UPDATE ma_5=VALUES(ma_5),rsi_14=VALUES(rsi_14),volume_ratio=VALUES(volume_ratio)", (code,str(td),_sma(cl,5),_sma(cl,10),_sma(cl,20),_sma(cl,60),_sma(cl,120),_sma(cl,250),_rsi(cl,14),_rsi(cl,14),_sma(vl,5) if vl else 1))
                 done += 1
-            except Exception as e:
-                pass
+            except: pass
         c.commit(); cu2.close(); c.close()
         return ok({"done": done, "total": len(pool), "trade_date": str(td)})
     except Exception as e:
@@ -137,8 +136,7 @@ def refresh_basic():
         for _, r in pool_df.iterrows():
             def sf(v):
                 try: v = float(v or 0)
-                except Exception as e:
-                    v = 0
+                except: v = 0
                 return v if not (math.isnan(v) or math.isinf(v)) else 0
             try:
                 cu3.execute("""
@@ -149,8 +147,7 @@ def refresh_basic():
                       sf(r.get('pe')), sf(r.get('pe_ttm')), sf(r.get('pb')), sf(r.get('ps')), sf(r.get('ps_ttm')),
                       sf(r.get('dv_ratio')), sf(r.get('dv_ttm')), sf(r.get('total_mv')), sf(r.get('circ_mv'))))
                 ok_cnt += 1
-            except Exception as e:
-                pass
+            except: pass
         c2.commit(); cu3.close(); c2.close()
         return ok({"total": ok_cnt, "trade_date": str(td)})
     except Exception as e:
