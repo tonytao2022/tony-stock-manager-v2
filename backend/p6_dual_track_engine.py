@@ -29,6 +29,54 @@ from db_config import get_connection
 import warnings
 warnings.filterwarnings("ignore")
 
+
+# ⭐ penalty_log 持久化辅助函数
+def _record_penalty(ts_code: str, trade_date, track: str, reasons: list, total_points: float, context: dict):
+    """记录惩罚分明细到 penalty_log 表"""
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        now_val = str(trade_date) if not isinstance(trade_date, str) else trade_date
+
+        # 解析 reasons 列表, 每条规则 INSERT 一笔
+        for reason in reasons:
+            # reason 格式: "破MA20(t80→48)" 或 "空头排列+5" 或 "5日跌-6%-15"
+            for rule_name in ['破MA20', '空头排列', '5日跌', '10日跌', '20日跌']:
+                if rule_name in reason:
+                    # 提取分数
+                    pts = 0.0
+                    import re
+                    pts_match = re.search(r'(\d+(\.\d+)?)$', reason.replace('-', ''))
+                    if pts_match:
+                        pts = float(pts_match.group(1))
+                    
+                    # 提取触发值
+                    trigger_val = None
+                    if rule_name == '破MA20':
+                        trigger_val = round(float(context.get('ma20', 0)), 2)
+                    elif rule_name == '空头排列':
+                        trigger_val = round(float(context.get('close', 0)), 2)
+                    elif rule_name == '5日跌':
+                        trigger_val = round(float(context.get('r5', 0)) * 100, 2)
+                    elif rule_name == '10日跌':
+                        trigger_val = round(float(context.get('r10', 0)) * 100, 2)
+                    elif rule_name == '20日跌':
+                        trigger_val = round(float(context.get('r20', 0)) * 100, 2) if 'r20' in context else round(float(context.get('r20_ret', 0)) * 100, 2)
+                    
+                    cur.execute(
+                        """INSERT INTO penalty_log
+                           (ts_code, trade_date, track, rule_name, penalty_points, trigger_value)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (ts_code, now_val, track, rule_name, pts, trigger_val)
+                    )
+                    break
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        # penalty_log 是辅助信息, 不能因为写入失败影响主流程
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from season_engine import SeasonEngine
 from score_engine import score_chanlun_enhanced
@@ -81,8 +129,48 @@ class MarketContext:
             if len(rows) >= 5:
                 return (rows[0] - rows[-1]) / rows[-1]
             return 0.0
-        except:
+        except Exception as e:
             return 0.0
+
+    def get_effective_season(self) -> str:
+        """
+        根据季节置信度加权校准 (P1-6, 2026-07-21)
+        
+        规则:
+        - confidence >= 0.7: 原季节不变（标准买线）
+        - confidence 0.4~0.7: 如果原季节是细分类型（如chaos_spring），回退到其父类（chaos）
+        - confidence < 0.4: 强制回退到 chaos
+        
+        Returns:
+            加权后的季节类型
+        """
+        conf = self.confidence
+        season = self.season
+        
+        if conf >= 0.7:
+            return season  # 高置信：维持原判
+        elif conf >= 0.4:
+            # 中置信：子态回退到父类
+            parent_map = {
+                'chaos_spring': 'chaos',
+                'chaos_autumn': 'chaos',
+                'weak_spring': 'spring',
+                'weak_autumn': 'autumn',
+            }
+            return parent_map.get(season, season)
+        else:
+            # 低置信：强制回退混沌
+            return 'chaos'
+
+    def get_buy_line_override(self, original_buy_line: int, season: str) -> int:
+        """
+        基于置信度对买入线做微调
+        
+        confidence < 0.4 时买入线提高5分（更严格）
+        """
+        if self.confidence < 0.4 and season != 'chaos':
+            return original_buy_line + 5  # 低置信度时更保守
+        return original_buy_line
 
 
 # ============================================================
@@ -107,7 +195,7 @@ def _calc_vol_ratio(ts_code: str, trade_date: str) -> float:
         cur.close(); conn.close()
         if row and row['vol_ratio'] is not None:
             return float(row['vol_ratio'])
-    except:
+    except Exception as e:
         pass
     return 1.0
 
@@ -489,22 +577,58 @@ def track_momentum(ts_code: str, ctx: MarketContext) -> Dict:
                 penalty_score += 5
                 penalty_reason.append('空头排列+5')
 
-            # ─── 跌幅惩罚（V13.3b: 阈值更宽, 上限更高）───
-            if r5 < -0.05:  # 5日跌超5%
-                p = min(15, int(abs(r5) * 180))
+            # ─── 跌幅惩罚 P1-5 (ATR阶梯收紧, 2026-07-21) ───
+            # 阶梯式扣分：轻度亏损区(5-10%)不扣，中度(10-15%)轻扣，重度(15%+)中扣
+            # 扣分上限：从每档15分调整为阶梯档10/15/20
+            if r5 < -0.15:  # 5日跌超15% → 重罚
+                p = min(20, int(abs(r5) * 120))
                 penalty_score += p
-                penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
-            if r10 < -0.08:  # 10日跌超8%
-                p = min(15, int(abs(r10) * 120))
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-重{p}')
+            elif r5 < -0.10:  # 5日跌10-15% → 中罚
+                p = min(15, int(abs(r5) * 140))
                 penalty_score += p
-                penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
-            if r20_ret < -0.10:  # 20日跌超10%
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-中{p}')
+            elif r5 < -0.05:  # 5日跌5-10% → 轻罚
+                p = min(10, int(abs(r5) * 110))
+                penalty_score += p
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-轻{p}')
+            # -5%以内不扣
+
+            if r10 < -0.20:  # 10日跌超20%
+                p = min(20, int(abs(r10) * 100))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-重{p}')
+            elif r10 < -0.12:  # 10日跌12-20%
+                p = min(15, int(abs(r10) * 125))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-中{p}')
+            elif r10 < -0.08:  # 10日跌8-12%
+                p = min(10, int(abs(r10) * 100))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-轻{p}')
+            # -8%以内不扣
+
+            if r20_ret < -0.25:  # 20日跌超25%
+                p = min(20, int(abs(r20_ret) * 80))
+                penalty_score += p
+                penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-重{p}')
+            elif r20_ret < -0.15:  # 20日跌15-25%
                 p = min(15, int(abs(r20_ret) * 100))
                 penalty_score += p
-                penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-{p}')
+                penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-中{p}')
+            elif r20_ret < -0.10:  # 20日跌10-15%
+                p = min(10, int(abs(r20_ret) * 100))
+                penalty_score += p
+                penalty_reason.append(f'20日跌{r20_ret*100:.0f}%-轻{p}')
+            # -10%以内不扣
 
         details['penalty_score'] = round(penalty_score, 1)
         details['penalty_reason'] = ';'.join(penalty_reason) if penalty_reason else '无'
+
+        # ⭐ penalty_log 持久化（每个惩罚规则一条记录）
+        if penalty_score > 0:
+            _record_penalty(ts_code, ctx.trade_date, 'momentum', penalty_reason, penalty_score,
+                            {'r5':r5, 'r10':r10, 'r20_ret':r20_ret, 'close':close_price, 'ma5':ma5, 'ma20':ma20})
 
         # 7. 综合（扣除惩罚分）
         # V13.3e权重: 趋势30% + 位置8% + 结构12% + 动量30% + 资金20%
@@ -749,22 +873,54 @@ def track_reversion(ts_code: str, ctx: MarketContext) -> Dict:
             if ma5_c > 0 and ma20_c > 0 and close_price < ma5_c and ma5_c < ma20_c:
                 penalty_score += 5
                 penalty_reason.append('空头排列+5')
-            # 跌幅惩罚
-            if r5 < -0.05:
-                p = min(15, int(abs(r5) * 180))
+            # 跌幅惩罚 P1-5 (ATR阶梯收紧, 同步动量轨)
+            if r5 < -0.15:
+                p = min(20, int(abs(r5) * 120))
                 penalty_score += p
-                penalty_reason.append(f'5日跌{r5*100:.0f}%-{p}')
-            if r10 < -0.08:
-                p = min(15, int(abs(r10) * 120))
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-重{p}')
+            elif r5 < -0.10:
+                p = min(15, int(abs(r5) * 140))
                 penalty_score += p
-                penalty_reason.append(f'10日跌{r10*100:.0f}%-{p}')
-            if r20 < -0.10:
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-中{p}')
+            elif r5 < -0.05:
+                p = min(10, int(abs(r5) * 110))
+                penalty_score += p
+                penalty_reason.append(f'5日跌{r5*100:.0f}%-轻{p}')
+
+            if r10 < -0.20:
+                p = min(20, int(abs(r10) * 100))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-重{p}')
+            elif r10 < -0.12:
+                p = min(15, int(abs(r10) * 125))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-中{p}')
+            elif r10 < -0.08:
+                p = min(10, int(abs(r10) * 100))
+                penalty_score += p
+                penalty_reason.append(f'10日跌{r10*100:.0f}%-轻{p}')
+
+            if r20 < -0.25:
+                p = min(20, int(abs(r20) * 80))
+                penalty_score += p
+                penalty_reason.append(f'20日跌{r20*100:.0f}%-重{p}')
+            elif r20 < -0.15:
                 p = min(15, int(abs(r20) * 100))
                 penalty_score += p
-                penalty_reason.append(f'20日跌{r20*100:.0f}%-{p}')
+                penalty_reason.append(f'20日跌{r20*100:.0f}%-中{p}')
+            elif r20 < -0.10:
+                p = min(10, int(abs(r20) * 100))
+                penalty_score += p
+                penalty_reason.append(f'20日跌{r20*100:.0f}%-轻{p}')
 
         details['penalty_score'] = round(penalty_score, 1)
         details['penalty_reason'] = ';'.join(penalty_reason) if penalty_reason else '无'
+
+        # ⭐ penalty_log 持久化
+        if penalty_score > 0:
+            _record_penalty(ts_code, ctx.trade_date, 'reversion', penalty_reason, penalty_score,
+                            {'r5':r5, 'r10':r10, 'r20':r20, 'close':close_price, 'ma5':ma5_c, 'ma20':ma20_c})
+
         final_score = max(0, min(100, round(final_score - penalty_score, 1)))
         details['final_raw'] = round(final_score + penalty_score, 1)
 
@@ -783,7 +939,7 @@ def _apply_filters(results: List[Dict], trade_date: str, hs300_trend: float) -> 
     对批量评分结果应用买入过滤层
     
     过滤规则:
-    1. 爆量>2倍（拉高出货信号）→ 过滤
+    1. 爆量>2倍（拉高出货信号）→ 过滤  [P1-5:收紧至>100%量增]
     2. 大盘近5日跌>3% → 过滤（系统性风险）
     3. 资金近5日净流出+爆量 → 过滤（主力出逃）
     4. 缩量<0.5倍+资金流入 → 加分标记（地量见底）
@@ -800,14 +956,14 @@ def _apply_filters(results: List[Dict], trade_date: str, hs300_trend: float) -> 
         # 计算量比（当日vol/前20日均量）
         vol_ratio = _calc_vol_ratio(ts_code, trade_date)
         
-        # 规则1: 爆量>2倍 → 过滤
+        # 规则1: 爆量>2倍（100%量增）→ 过滤 [P1-5: 收紧至2.0倍]
         if vol_ratio > 2.0:
             reasons.append(f'爆量{vol_ratio:.1f}倍>2')
         
         # 资金验证
         _, mf_5d, lg_r = _calc_moneyflow_score(ts_code, trade_date)
         
-        # 规则3: 爆量+资金流出
+        # 规则3: 爆量+资金流出（主力出逃）
         if vol_ratio > 2.0 and mf_5d < -50000:
             reasons.append(f'爆量+资金流出{mf_5d/10000:.0f}万')
         
@@ -855,7 +1011,7 @@ def _is_strong_stock(code, ctx):
             ret = (rows[0] - rows[-1]) / rows[-1]
             return ret > 0.15
         return False
-    except:
+    except Exception as e:
         return False
 
 
